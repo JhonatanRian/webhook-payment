@@ -7,7 +7,7 @@ from app.modules.invoice.service import InvoiceService
 from app.modules.scheduler.model import ScheduleCycleRecord
 from app.modules.scheduler.repository import ScheduleCycleRepository
 
-logger = logging.getLogger("app.scheduler")
+logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 
