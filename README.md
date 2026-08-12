@@ -6,17 +6,10 @@ Aplicação FastAPI desenvolvida em arquitectura de Monólito Modular (*Modular 
 
 ## Como Rodar o Projeto
 
-### 1. Ativar o Ambiente Virtual (Python 3.12+)
+### 1. Instalar depedências com uv
 
 ```bash
-source /home/jhonatan/projects/webhook-payment/.venv/bin/activate
-```
-
-*(Ou crie/instale as dependências usando `uv`)*:
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -e ".[dev]"
+uv sync --dev
 ```
 
 ---
@@ -59,7 +52,7 @@ Acesse a documentação interativa das APIs:
 Executar todos os testes unitários e de integração com Pytest:
 
 ```bash
-pytest -v
+uv run pytest -v
 ```
 
 ---
