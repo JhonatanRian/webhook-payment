@@ -1,0 +1,37 @@
+from collections.abc import Sequence
+
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.modules.invoice.model import InvoiceBatch, InvoiceRecord
+from app.shared.repository import BaseRepository
+
+
+class InvoiceBatchRepository(BaseRepository[InvoiceBatch]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(model=InvoiceBatch, session=session)
+
+    async def get_by_cycle(self, cycle_index: int) -> InvoiceBatch | None:
+        query = (
+            select(InvoiceBatch)
+            .options(selectinload(InvoiceBatch.invoices))
+            .where(InvoiceBatch.cycle_index == cycle_index)
+        )
+        result = await self.session.execute(query)
+        return result.scalars().first()
+
+    async def get_all(self) -> Sequence[InvoiceBatch]:
+        query = select(InvoiceBatch).options(selectinload(InvoiceBatch.invoices))
+        result = await self.session.execute(query)
+        return result.scalars().all()
+
+
+class InvoiceRecordRepository(BaseRepository[InvoiceRecord]):
+    def __init__(self, session: AsyncSession) -> None:
+        super().__init__(model=InvoiceRecord, session=session)
+
+    async def get_by_stark_id(self, stark_invoice_id: str) -> InvoiceRecord | None:
+        query = select(InvoiceRecord).where(InvoiceRecord.stark_invoice_id == stark_invoice_id)
+        result = await self.session.execute(query)
+        return result.scalars().first()
