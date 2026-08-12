@@ -1,7 +1,5 @@
 import time
 
-import pytest
-
 from app.core.concurrency import run_in_thread
 
 
@@ -11,7 +9,6 @@ def sync_blocking_func(x: int, y: int) -> int:
     return x + y
 
 
-@pytest.mark.asyncio
 async def test_run_in_thread_decorator() -> None:
     result = await sync_blocking_func(10, 20)
     assert result == 30

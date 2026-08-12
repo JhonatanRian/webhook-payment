@@ -1,10 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 
-@pytest.mark.asyncio
 async def test_scheduler_status_api(async_client: AsyncClient) -> None:
     res = await async_client.get("/api/v1/scheduler/status")
     assert res.status_code == 200
@@ -14,7 +12,6 @@ async def test_scheduler_status_api(async_client: AsyncClient) -> None:
     assert data["remaining_cycles"] == 8
 
 
-@pytest.mark.asyncio
 async def test_trigger_manual_cycle_api(async_client: AsyncClient) -> None:
     mock_stark_invoices = [
         MagicMock(id=f"stark_inv_{i}", amount=12000, status="created") for i in range(10)

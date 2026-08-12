@@ -1,10 +1,8 @@
 from unittest.mock import MagicMock, patch
 
-import pytest
 from httpx import AsyncClient
 
 
-@pytest.mark.asyncio
 async def test_trigger_invoice_batch_api(async_client: AsyncClient) -> None:
     mock_stark_invoices = [
         MagicMock(id=f"stark_inv_{i}", amount=10000, status="created") for i in range(8)
@@ -19,7 +17,6 @@ async def test_trigger_invoice_batch_api(async_client: AsyncClient) -> None:
         assert len(data["invoices"]) == 8
 
 
-@pytest.mark.asyncio
 async def test_list_invoice_batches_api(async_client: AsyncClient) -> None:
     res = await async_client.get("/api/v1/invoices/batches")
     assert res.status_code == 200

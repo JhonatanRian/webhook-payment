@@ -11,14 +11,12 @@ from app.core.exceptions.domain_exceptions import (
 from app.modules.webhook.service import WebhookService
 
 
-@pytest.mark.asyncio
 async def test_webhook_missing_signature(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
     with pytest.raises(WebhookSignatureError):
         await service.process_webhook(body_bytes=b"{}", signature=None)
 
 
-@pytest.mark.asyncio
 async def test_webhook_invalid_signature(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
     with patch(
@@ -29,7 +27,13 @@ async def test_webhook_invalid_signature(db_session: AsyncSession) -> None:
             await service.process_webhook(body_bytes=b"{}", signature="bad_sig")
 
 
-@pytest.mark.asyncio
+async def test_webhook_general_parsing_exception(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+    with patch("starkbank.event.parse", side_effect=ValueError("Corrupt JSON payload")):
+        with pytest.raises(WebhookSignatureError):
+            await service.process_webhook(body_bytes=b"corrupt", signature="some_sig")
+
+
 async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
 
@@ -58,16 +62,26 @@ async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
             )
 
 
-@pytest.mark.asyncio
+async def test_webhook_non_credited_event(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+
+    mock_log = MagicMock(type="registered")
+    mock_event = MagicMock(id="evt_reg_1", subscription="invoice", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_reg")
+        assert res["status"] == "success"
+        assert res["event_id"] == "evt_reg_1"
+        assert res["transfer_id"] is None
+
+
 async def test_webhook_duplicate_event_id(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
 
     mock_event = MagicMock(id="evt_duplicate", subscription="invoice", log=MagicMock(type="other"))
 
     with patch("starkbank.event.parse", return_value=mock_event):
-        # Process first time
         await service.process_webhook(body_bytes=b"{}", signature="sig1")
 
-        # Process second time -> duplicate
         with pytest.raises(DuplicateEventError):
             await service.process_webhook(body_bytes=b"{}", signature="sig2")
