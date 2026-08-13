@@ -29,6 +29,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./webhook_payment.db"
 
+    LOG_LEVEL: str = "INFO"
+    LOG_FORMAT: str = "auto"
+
     @property
     def resolved_private_key(self) -> str:
         if self.STARK_PRIVATE_KEY_PATH:
@@ -51,11 +54,28 @@ class Settings(BaseSettings):
 
         return ""
 
+    @field_validator("LOG_LEVEL", mode="before")
+    @classmethod
+    def sanitize_log_level(cls, v: str) -> str:
+        if isinstance(v, str):
+            v_upper = v.upper().strip()
+            if v_upper in ("DEBUG", "INFO", "WARNING", "WARN", "ERROR", "CRITICAL"):
+                return "WARNING" if v_upper == "WARN" else v_upper
+        return "INFO"
+
+    @field_validator("LOG_FORMAT", mode="before")
+    @classmethod
+    def sanitize_log_format(cls, v: str) -> str:
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            if v_lower in ("json", "default", "auto"):
+                return v_lower
+        return "auto"
+
     @field_validator("TARGET_TAX_ID", mode="before")
     @classmethod
     def sanitize_tax_id(cls, v: str) -> str:
         if isinstance(v, str):
-            # Strip punctuation like . / -
             return v.replace(".", "").replace("/", "").replace("-", "").strip()
         return v
 

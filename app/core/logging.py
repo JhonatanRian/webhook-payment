@@ -3,12 +3,22 @@ import logging.config
 import sys
 from typing import Any
 
-from app.core.config import settings
+from app.core.config import Settings, get_settings
 
 
-def setup_logging() -> None:
+def setup_logging(custom_settings: Settings | None = None) -> None:
     """Configures centralized application logging system via dictConfig."""
-    is_development = settings.STARK_ENVIRONMENT.lower() in ("sandbox", "development", "local")
+    cfg = custom_settings or get_settings()
+    is_development = cfg.STARK_ENVIRONMENT.lower() in ("sandbox", "development", "local")
+
+    if cfg.LOG_FORMAT == "json":
+        formatter_name = "json"
+    elif cfg.LOG_FORMAT == "default":
+        formatter_name = "default"
+    else:
+        formatter_name = "default" if is_development else "json"
+
+    log_level = cfg.LOG_LEVEL.upper()
 
     logging_config: dict[str, Any] = {
         "version": 1,
@@ -31,16 +41,16 @@ def setup_logging() -> None:
             "console": {
                 "class": "logging.StreamHandler",
                 "stream": sys.stdout,
-                "formatter": "default" if is_development else "json",
+                "formatter": formatter_name,
             },
         },
         "root": {
-            "level": "INFO",
+            "level": log_level,
             "handlers": ["console"],
         },
         "loggers": {
             "uvicorn.access": {"level": "WARNING"},
-            "apscheduler": {"level": "INFO"},
+            "apscheduler": {"level": log_level},
         },
     }
 

@@ -7,7 +7,7 @@ from app.core.config import Settings
 
 def test_resolved_private_key_inline_string() -> None:
     raw_key = "-----BEGIN ECDSA PRIVATE KEY-----\\nMHcCAQEEIBx\\n-----END ECDSA PRIVATE KEY-----"
-    settings = Settings(STARK_PRIVATE_KEY=raw_key)
+    settings = Settings(STARK_PRIVATE_KEY=raw_key, STARK_PRIVATE_KEY_PATH="")
     resolved = settings.resolved_private_key
     assert "\\n" not in resolved
     assert "\n" in resolved
@@ -28,7 +28,7 @@ def test_resolved_private_key_from_stark_private_key_as_path(tmp_path: Path) -> 
     pem_content = "-----BEGIN ECDSA PRIVATE KEY-----\nFILE_KEY\n-----END ECDSA PRIVATE KEY-----"
     pem_file.write_text(pem_content, encoding="utf-8")
 
-    settings = Settings(STARK_PRIVATE_KEY=str(pem_file))
+    settings = Settings(STARK_PRIVATE_KEY=str(pem_file), STARK_PRIVATE_KEY_PATH="")
     assert settings.resolved_private_key == pem_content
 
 
