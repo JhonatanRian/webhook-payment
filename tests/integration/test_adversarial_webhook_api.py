@@ -8,6 +8,10 @@ from httpx import AsyncClient
 @pytest.mark.asyncio
 async def test_webhook_concurrent_requests_idempotency(async_client: AsyncClient) -> None:
     """Concurrent requests with identical event.id must prevent double payouts."""
+    mock_stark_invoices = [MagicMock(id="inv_concurrent_1", amount=20000, status="created")]
+    with patch("starkbank.invoice.create", return_value=mock_stark_invoices):
+        await async_client.post("/api/v1/invoices/batch?count=1")
+
     mock_invoice = MagicMock(id="inv_concurrent_1", amount=20000, fee=100)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_concurrent_999", subscription="invoice", log=mock_log)
@@ -39,8 +43,12 @@ async def test_webhook_concurrent_requests_idempotency(async_client: AsyncClient
 
 
 @pytest.mark.asyncio
-async def test_webhook_transfer_failure_allows_retry(async_client: AsyncClient, db_session) -> None:
+async def test_webhook_transfer_failure_allows_retry(async_client: AsyncClient) -> None:
     """If transfer fails on first attempt, webhook redelivery must be able to retry."""
+    mock_stark_invoices = [MagicMock(id="inv_retry_1", amount=15000, status="created")]
+    with patch("starkbank.invoice.create", return_value=mock_stark_invoices):
+        await async_client.post("/api/v1/invoices/batch?count=1")
+
     mock_invoice = MagicMock(id="inv_retry_1", amount=15000, fee=200)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_fail_then_retry", subscription="invoice", log=mock_log)
@@ -73,6 +81,10 @@ async def test_webhook_transfer_failure_allows_retry(async_client: AsyncClient, 
 @pytest.mark.asyncio
 async def test_webhook_negative_or_zero_net_amount(async_client: AsyncClient) -> None:
     """Invoices where fee >= gross amount must be rejected with 422 Unprocessable Content."""
+    mock_stark_invoices = [MagicMock(id="inv_neg_1", amount=500, status="created")]
+    with patch("starkbank.invoice.create", return_value=mock_stark_invoices):
+        await async_client.post("/api/v1/invoices/batch?count=1")
+
     mock_invoice = MagicMock(id="inv_neg_1", amount=500, fee=600)  # Net = -100
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_neg_net", subscription="invoice", log=mock_log)

@@ -43,7 +43,7 @@ async def test_scheduler_invalid_mode_fallback(async_client: AsyncClient) -> Non
     status_res = await async_client.get("/api/v1/scheduler/status")
     assert status_res.json()["mode"] == "once"
 
-    set_current_mode("once")
+    await set_current_mode("once")
 
 
 @pytest.mark.asyncio
