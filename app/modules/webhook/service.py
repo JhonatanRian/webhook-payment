@@ -12,6 +12,7 @@ from app.core.exceptions.domain_exceptions import (
     WebhookSignatureError,
 )
 from app.modules.invoice.repository import InvoiceRecordRepository
+from app.modules.transfer.repository import TransferRepository
 from app.modules.transfer.service import TransferService
 from app.modules.webhook.model import WebhookEventRecord
 from app.modules.webhook.repository import WebhookEventRepository
@@ -28,6 +29,7 @@ class WebhookService:
         self.session = session
         self.event_repo = WebhookEventRepository(session=session)
         self.invoice_repo = InvoiceRecordRepository(session=session)
+        self.transfer_repo = TransferRepository(session=session)
         self.transfer_service = TransferService(session=session)
 
     @run_in_thread
@@ -48,9 +50,9 @@ class WebhookService:
         amount = getattr(item_obj, "amount", 0)
         fee = getattr(item_obj, "fee", 0) or 0
 
-        inv_record = None
-        if stark_item_id:
-            inv_record = await self.invoice_repo.get_by_stark_id(stark_item_id)
+        inv_record = (
+            await self.invoice_repo.get_by_stark_id(stark_item_id) if stark_item_id else None
+        )
 
         if not inv_record:
             logger.warning(
@@ -71,28 +73,59 @@ class WebhookService:
         )
         return str(transfer_rec.id)
 
+    async def _handle_invoice_event(self, log_obj: Any, event_id: str) -> str | None:
+        """Handles 'invoice' subscription events. Only acts on 'credited' log type."""
+        if getattr(log_obj, "type", None) != "credited":
+            return None
+        invoice_obj = getattr(log_obj, "invoice", None)
+        if not invoice_obj:
+            return None
+        return await self._dispatch_credited_invoice(invoice_obj, event_id)
+
+    async def _handle_transfer_event(self, log_obj: Any, event_id: str) -> str | None:  # noqa: ARG002
+        """Handles 'transfer' subscription events. Updates local TransferRecord status."""
+        transfer_obj = getattr(log_obj, "transfer", None)
+        if not transfer_obj:
+            return None
+        stark_transfer_id = getattr(transfer_obj, "id", None)
+        new_status = getattr(transfer_obj, "status", None)
+        if not (stark_transfer_id and new_status):
+            return None
+        transfer_rec = await self.transfer_repo.get_by_stark_id(stark_transfer_id)
+        if not transfer_rec:
+            return None
+        transfer_rec.status = new_status
+        self.session.add(transfer_rec)
+        logger.info(
+            "Transfer status updated via webhook [stark_transfer_id=%s, status=%s]",
+            stark_transfer_id,
+            new_status,
+        )
+        return str(transfer_rec.id)
+
     async def _persist_and_dispatch(self, event: starkbank.Event, body_bytes: bytes) -> str | None:
         existing = await self.event_repo.get_by_event_id(event.id)
         if existing:
             raise DuplicateEventError(event_id=event.id)
 
         log_obj = getattr(event, "log", None)
-        log_type = getattr(log_obj, "type", None) if log_obj else None
         subscription = getattr(event, "subscription", None)
 
         record = WebhookEventRecord(
             event_id=event.id,
             subscription=subscription,
-            log_type=log_type,
+            log_type=getattr(log_obj, "type", None) if log_obj else None,
             payload=body_bytes.decode("utf-8", errors="replace"),
         )
         await self.event_repo.create(record, autocommit=False)
 
-        transfer_record_id: str | None = None
-        if subscription == "invoice" and log_type == "credited":
-            invoice_obj = getattr(log_obj, "invoice", None)
-            if invoice_obj:
-                transfer_record_id = await self._dispatch_credited_invoice(invoice_obj, event.id)
+        _handlers = {
+            "invoice": self._handle_invoice_event,
+            "transfer": self._handle_transfer_event,
+        }
+
+        handler = _handlers.get(subscription)
+        transfer_record_id = await handler(log_obj, event.id) if handler else None
 
         await self.session.commit()
         return transfer_record_id

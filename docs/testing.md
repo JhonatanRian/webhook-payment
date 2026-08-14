@@ -6,8 +6,8 @@ Para garantir a confiabilidade de um sistema financeiro, construímos uma suíte
 
 ## 📊 Visão Geral dos Testes
 
-- **Total de Testes**: **103 testes automatizados**.
-- **Tempo de Execução**: ~10 segundos.
+- **Total de Testes**: **117 testes automatizados**.
+- **Tempo de Execução**: ~11 segundos.
 - **Cobertura de Código**: **100%** (com trava mínima de 90% configurada no `pyproject.toml`).
 - **Relatórios**: Integração com Codecov gerando `coverage.xml` e `junit.xml`.
 
