@@ -44,3 +44,10 @@ def test_setup_logging_explicit_json_format() -> None:
     setup_logging(custom_settings=cfg)
     root_logger = logging.getLogger()
     assert root_logger.handlers[0].formatter is not None
+
+
+def test_setup_logging_explicit_default_format() -> None:
+    cfg = Settings(STARK_ENVIRONMENT="production", LOG_FORMAT="default")
+    setup_logging(custom_settings=cfg)
+    root_logger = logging.getLogger()
+    assert root_logger.handlers[0].formatter is not None

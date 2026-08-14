@@ -31,7 +31,7 @@ flowchart TD
 
 O sistema suporta **dois modos dinâmicos** configuráveis via variável de ambiente (`SCHEDULER_MODE`) ou pela API em tempo de execução (`PUT /api/v1/scheduler/mode`):
 
-### 1. Modo `once` (Padrão para Avaliação / Desafio)
+### 1. Modo `once`
 - **Comportamento:** Executa rigorosamente **até 8 ciclos** (totalizando 24 horas a cada 3 horas) e, após atingir a meta, **encerra as emissões automáticas** mantendo o agendador em espera.
 - **Caso de uso:** Ideal para bater a meta exata de testes de 24h sem gerar cobranças indefinidas no Sandbox.
 

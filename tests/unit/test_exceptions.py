@@ -128,3 +128,18 @@ async def test_starkbank_exception_handlers_http_mapping() -> None:
         r10 = await client.get("/stark-integration")
         assert r10.status_code == 500
         assert r10.json()["error"] == "starkbank_integration_error"
+
+
+async def test_fallback_unhandled_exception_handler() -> None:
+    test_app = FastAPI()
+    register_exception_handlers(test_app)
+
+    @test_app.get("/unhandled")
+    async def raise_unhandled(request: Request):
+        raise ValueError("Critical unexpected error")
+
+    transport = ASGITransport(app=test_app, raise_app_exceptions=False)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        r = await client.get("/unhandled")
+        assert r.status_code == 500
+        assert r.json() == {"detail": "An internal server error occurred."}

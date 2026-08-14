@@ -56,3 +56,22 @@ async def test_base_repository_crud_operations(db_session: AsyncSession) -> None
     await repo.delete(updated_schema, autocommit=False)
     after_delete = await repo.get(created_rec.id)
     assert after_delete is None
+
+    # 6. Create and delete with autocommit=True
+    rec2 = TransferRecord(
+        amount=2000,
+        fee=20,
+        net_amount=1980,
+        target_bank_code="20018183",
+        target_branch="0001",
+        target_account="6341320293482496",
+        target_name="Stark Bank S.A.",
+        target_tax_id="20018183000180",
+        target_account_type="payment",
+        status="created",
+    )
+    c2 = await repo.create(rec2, autocommit=True)
+    all_recs = await repo.get_all()
+    assert len(all_recs) >= 1
+    await repo.delete(c2, autocommit=True)
+    assert await repo.get(c2.id) is None

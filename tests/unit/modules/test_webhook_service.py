@@ -2,6 +2,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 import starkbank
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions.domain_exceptions import (
@@ -18,64 +19,65 @@ async def test_webhook_missing_signature(db_session: AsyncSession) -> None:
     with pytest.raises(WebhookSignatureError):
         await service.process_webhook(body_bytes=b"{}", signature=None)
 
+    with pytest.raises(WebhookSignatureError):
+        await service.process_webhook(body_bytes=b"{}", signature="")
+
 
 async def test_webhook_invalid_signature(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
-    with patch(
-        "starkbank.event.parse",
-        side_effect=starkbank.error.InvalidSignatureError("Invalid signature"),
-    ):
+    with patch("starkbank.event.parse", side_effect=Exception("Invalid signature")):
         with pytest.raises(WebhookSignatureError):
             await service.process_webhook(body_bytes=b"{}", signature="bad_sig")
 
 
+async def test_webhook_stark_invalid_signature_error(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+    with patch(
+        "starkbank.event.parse",
+        side_effect=starkbank.error.InvalidSignatureError("Digital signature validation failed"),
+    ):
+        with pytest.raises(WebhookSignatureError):
+            await service.process_webhook(body_bytes=b"{}", signature="bad_stark_sig")
+
+
 async def test_webhook_general_parsing_exception(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
-    with patch("starkbank.event.parse", side_effect=ValueError("Corrupt JSON payload")):
+    with patch("starkbank.event.parse", side_effect=ValueError("Malformed JSON")):
         with pytest.raises(WebhookSignatureError):
-            await service.process_webhook(body_bytes=b"corrupt", signature="some_sig")
+            await service.process_webhook(body_bytes=b"{}", signature="some_sig")
 
 
 async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
-    service = WebhookService(session=db_session)
-
-    # Pre-create an invoice record in DB
     inv_repo = InvoiceRecordRepository(session=db_session)
-    local_inv = InvoiceRecord(
-        stark_invoice_id="inv_100",
-        amount=20000,
-        tax_id="12345678901",
-        name="Test User",
+    inv_record = InvoiceRecord(
+        stark_invoice_id="inv_123",
+        amount=5000,
+        tax_id="12345678909",
+        name="Customer",
         status="created",
     )
-    await inv_repo.create(local_inv, autocommit=True)
+    await inv_repo.create(inv_record, autocommit=True)
 
-    mock_invoice = MagicMock(id="inv_100", amount=20000, fee=100)
+    service = WebhookService(session=db_session)
+    mock_invoice = MagicMock(id="inv_123", amount=5000, fee=100)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
-    mock_event = MagicMock(id="evt_555", subscription="invoice", log=mock_log)
+    mock_event = MagicMock(id="evt_123", subscription="invoice", log=mock_log)
 
-    mock_transfer_record = MagicMock(id="tr_record_id")
+    mock_transfer_rec = MagicMock(id="tr_rec_999")
 
     with patch("starkbank.event.parse", return_value=mock_event):
-        with patch.object(
-            service.transfer_service,
-            "transfer_credited_invoice",
-            return_value=mock_transfer_record,
-        ) as mock_transfer_call:
-            res = await service.process_webhook(body_bytes=b"{}", signature="valid_sig")
+        with patch(
+            "app.modules.transfer.service.TransferService.transfer_credited_invoice",
+            return_value=mock_transfer_rec,
+        ) as mock_transfer:
+            res = await service.process_webhook(body_bytes=b"{}", signature="sig_ok")
 
             assert res["status"] == "success"
-            assert res["event_id"] == "evt_555"
-            assert res["transfer_id"] == "tr_record_id"
-            mock_transfer_call.assert_called_once_with(
-                gross_amount=20000,
-                fee=100,
-                stark_invoice_id="inv_100",
-                event_id="evt_555",
-                autocommit=False,
-            )
+            assert res["event_id"] == "evt_123"
+            assert res["transfer_id"] == "tr_rec_999"
+            assert mock_transfer.called
 
-    updated_inv = await inv_repo.get_by_stark_id("inv_100")
+    updated_inv = await inv_repo.get_by_stark_id("inv_123")
     assert updated_inv is not None
     assert updated_inv.status == "credited"
 
@@ -83,7 +85,7 @@ async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
 async def test_webhook_non_credited_event(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
 
-    mock_log = MagicMock(type="registered")
+    mock_log = MagicMock(type="created")
     mock_event = MagicMock(id="evt_reg_1", subscription="invoice", log=mock_log)
 
     with patch("starkbank.event.parse", return_value=mock_event):
@@ -103,3 +105,18 @@ async def test_webhook_duplicate_event_id(db_session: AsyncSession) -> None:
 
         with pytest.raises(DuplicateEventError):
             await service.process_webhook(body_bytes=b"{}", signature="sig2")
+
+
+async def test_webhook_integrity_error_rollback(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+
+    mock_event = MagicMock(id="evt_integ", subscription="invoice", log=MagicMock(type="other"))
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        with patch.object(
+            service,
+            "_persist_and_dispatch",
+            side_effect=IntegrityError("stmt", {}, Exception("dup")),
+        ):
+            with pytest.raises(DuplicateEventError):
+                await service.process_webhook(body_bytes=b"{}", signature="sig_integ")

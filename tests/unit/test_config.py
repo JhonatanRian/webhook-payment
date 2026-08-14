@@ -39,9 +39,16 @@ def test_resolved_private_key_file_not_found(tmp_path: Path) -> None:
         _ = settings.resolved_private_key
 
 
+def test_resolved_private_key_empty() -> None:
+    settings = Settings(STARK_PRIVATE_KEY="", STARK_PRIVATE_KEY_PATH="")
+    assert settings.resolved_private_key == ""
+
+
 def test_tax_id_sanitizer() -> None:
     settings = Settings(TARGET_TAX_ID="20.018.183/0001-80")
     assert settings.TARGET_TAX_ID == "20018183000180"
+
+    assert Settings.sanitize_tax_id(12345) == 12345
 
 
 def test_scheduler_mode_sanitizer() -> None:
@@ -77,3 +84,12 @@ def test_scheduler_jobstore_url_sanitizer() -> None:
 
     s2 = Settings(SCHEDULER_JOBSTORE_URL="sqlite:///./test.db")
     assert s2.SCHEDULER_JOBSTORE_URL == "sqlite:///./test.db"
+
+    s3 = Settings.model_validate({"SCHEDULER_JOBSTORE_URL": 123})
+    assert s3.SCHEDULER_JOBSTORE_URL == "sqlite:///./webhook_payment.db"
+
+
+def test_log_format_sanitizer() -> None:
+    assert Settings(LOG_FORMAT="JSON").LOG_FORMAT == "json"
+    assert Settings(LOG_FORMAT="default").LOG_FORMAT == "default"
+    assert Settings.model_validate({"LOG_FORMAT": 123}).LOG_FORMAT == "auto"

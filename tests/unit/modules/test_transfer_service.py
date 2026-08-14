@@ -38,6 +38,20 @@ async def test_transfer_credited_invoice_success(db_session: AsyncSession) -> No
     assert by_inv.id == record.id
 
 
+async def test_transfer_credited_invoice_empty_stark_response(db_session: AsyncSession) -> None:
+    service = TransferService(session=db_session)
+
+    with patch("starkbank.transfer.create", return_value=[]):
+        record = await service.transfer_credited_invoice(
+            gross_amount=10000,
+            fee=500,
+            stark_invoice_id="inv_empty_res",
+            event_id="evt_empty",
+        )
+        assert record.status == "success"
+        assert record.stark_transfer_id is None
+
+
 async def test_transfer_credited_invoice_zero_or_negative_net_amount(
     db_session: AsyncSession,
 ) -> None:
