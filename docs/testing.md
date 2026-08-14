@@ -1,73 +1,72 @@
-# 🧪 Estratégia de Testes & Qualidade de Software
+# 🧪 Estratégia de Testes & Qualidade
 
-A suíte de testes foi construída com foco em **confiabilidade financeira**, **idempotência** e **resiliência a falhas**, alcançando mais de **98% de cobertura** real de código.
-
----
-
-## 📊 Métricas da Suíte de Testes
-
-- **Total de Testes:** **103 testes automatizados**.
-- **Tempo de Execução:** ~10.6 segundos.
-- **Cobertura de Código (Coverage):** **100.00%** *(com barreira mínima de 90% configurada no `pyproject.toml`)*.
-- **Integração com Codecov:** Relatórios detalhados de cobertura (`coverage.xml`) e resultados de execução JUnit (`junit.xml`).
+Para garantir a confiabilidade de um sistema financeiro, construímos uma suíte de testes focada não apenas no caminho feliz (*happy path*), mas especialmente em **idempotência**, **falhas de rede** e **concorrência adversarial**.
 
 ---
 
-## 🗂️ Estrutura e Divisão dos Testes
+## 📊 Visão Geral dos Testes
 
-Os testes em [`tests/`](file:///home/jhonatan/projects/webhook-payment/tests) são divididos em camadas lógicas:
+- **Total de Testes**: **103 testes automatizados**.
+- **Tempo de Execução**: ~10 segundos.
+- **Cobertura de Código**: **100%** (com trava mínima de 90% configurada no `pyproject.toml`).
+- **Relatórios**: Integração com Codecov gerando `coverage.xml` e `junit.xml`.
+
+---
+
+## 🗂️ Como os Testes Estão Divididos
+
+Os testes na pasta [`tests/`](../tests) são organizados em duas frentes:
 
 ```text
 tests/
-├── conftest.py                             # Fixtures assíncronas do banco em memória e mocks
+├── conftest.py                             # Fixtures assíncronas de banco em memória e mocks do Stark Bank
 ├── integration/                            # Testes de Integração Ponta a Ponta
-│   ├── test_adversarial_concurrency.py    # Testes de concorrência massiva e race conditions
-│   ├── test_invoice_flow.py               # Fluxo completo de emissão de faturas
-│   ├── test_scheduler_flow.py             # Ciclos de agendamento e modos de operação
-│   └── test_webhook_flow.py               # Fluxo de webhook -> validação -> transferência
-└── unit/                                   # Testes Unitários de Domínio e Core
+│   ├── test_adversarial_concurrency.py    # Disparo simultâneo de múltiplos webhooks / faturas
+│   ├── test_invoice_flow.py               # Fluxo completo de emissão e persistência de lotes
+│   ├── test_scheduler_flow.py             # Máquina de estados do agendador e modos de execução
+│   └── test_webhook_flow.py               # Ciclo: Webhook -> Assinatura ECDSA -> Transferência
+└── unit/                                   # Testes Unitários Isolados
     ├── modules/
-    │   ├── test_invoice_service.py        # Geração aleatória e lotes de faturas
-    │   ├── test_scheduler_service.py      # Agendador, modos 'once'/'recurring' e falhas
-    │   ├── test_transfer_service.py       # Cálculo de valor líquido e regras de saldo
-    │   ├── test_webhook_service.py        # Assinatura ECDSA, eventos ignorados e duplicidades
-    │   └── test_adversarial_invoice_transfer.py # Casos extremos de liquidação
-    ├── test_base_repository.py            # Operações CRUD assíncronas genéricas
-    ├── test_concurrency.py                # Wrapper async to_thread
-    ├── test_config.py                     # Sanitização de settings e parsing de chaves
-    ├── test_db_session.py                 # Inicialização do banco e generators de sessão
+    │   ├── test_invoice_service.py        # Geração aleatória de dados com Faker e lotes
+    │   ├── test_scheduler_service.py      # Lógica de contagem de ciclos e limites em 24h
+    │   ├── test_transfer_service.py       # Cálculo de valor líquido e bloqueio de saldos <= 0
+    │   └── test_webhook_service.py        # Validação de assinaturas e eventos duplicados
+    ├── test_base_repository.py            # Operações CRUD genéricas e paginação
+    ├── test_concurrency.py                # Wrapper async com threadpool
+    ├── test_config.py                     # Leitura e sanitização de variáveis de ambiente
+    ├── test_db_session.py                 # Sessões e conexões do SQLite
     ├── test_exceptions.py                 # Hierarquia de exceções de domínio
-    ├── test_starkbank_exceptions.py       # Mapeamento de erros do SDK da Stark Bank
-    ├── test_logging.py                    # Formatação de logs em JSON e texto
-    └── test_middleware.py                 # Rastreamento de Correlation ID e logs HTTP
+    ├── test_starkbank_exceptions.py       # Mapeamento de erros do SDK externo
+    ├── test_logging.py                    # Formatação de logs estruturados
+    └── test_middleware.py                 # Rastreamento de Request-ID e logs HTTP
 ```
 
 ---
 
 ## 🥊 Testes Adversariais & Casos Extremos
 
-Além dos cenários de sucesso (*happy path*), a suíte testa exaustivamente condições adversas:
+Alguns dos cenários críticos que cobrimos:
 
-### 1. Concorrência e Race Conditions (`test_adversarial_concurrency.py`)
-Simula 10 a 20 requisições disparadas no exato mesmo milissegundo tentando emitir lotes ou disparar ciclos, garantindo que o banco de dados e as sessões assíncronas não sofram *deadlocks* ou inconsistências.
-
-### 2. Idempotência de Webhook
-Garante que se o Stark Bank reenviar o mesmo `event_id` múltiplas vezes (devido a retentativas de rede), a aplicação reconhece a duplicidade, retorna `200 OK` e **não duplica a transferência de dinheiro**.
-
-### 3. Falhas de Rede e Timeouts do SDK
-Simula exceções de timeout e indisponibilidade do Stark Bank SDK (`starkcore.error.InputErrors`, `InternalServerError`), validando que a API mapeia o erro para o formato JSON correto e nunca expõe tracebacks internos.
-
-### 4. Valores Líquidos Não-Positivos
-Valida que se uma fatura com taxa (`fee`) igual ou superior ao valor bruto for recebida, o sistema bloqueia a transferência de valor zero ou negativo.
+1. **Concorrência Massiva (`test_adversarial_concurrency.py`)**:
+   Simulamos 10 a 20 requisições disparadas no mesmo milissegundo tentando processar o mesmo webhook ou disparar ciclos, garantindo que o banco de dados e os locks assíncronos não sofram deadlocks nem dupliquem transferências.
+2. **Idempotência de Webhook**:
+   Se a Stark Bank reenviar o mesmo `event_id` por retry de rede, a aplicação reconhece a duplicidade, responde `200 OK` e **não repete a transferência**.
+3. **Falhas de Rede & Erros da Stark Bank**:
+   Simulamos timeouts e respostas de erro da API externa para garantir que a aplicação trate as exceções de forma limpa, sem expor tracebacks sensíveis.
+4. **Tarifas Maiores que o Valor da Fatura**:
+   Garantimos que se uma fatura tiver taxa bancária superior ao valor bruto, o sistema rejeite a operação e não tente transferir valores negativos.
 
 ---
 
 ## 🚀 Como Rodar os Testes Localmente
 
 ```bash
-# Executar toda a suíte com relatório de cobertura no terminal
+# Executar toda a suíte de testes
 uv run pytest -v
 
-# Executar com relatório HTML detalhado (abre em htmlcov/index.html)
+# Executar com relatório de cobertura no terminal
+uv run pytest -v --cov=app --cov-report=term-missing
+
+# Gerar relatório visual em HTML (abre na pasta htmlcov/index.html)
 uv run pytest -v --cov=app --cov-report=html
 ```

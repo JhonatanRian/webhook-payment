@@ -1,55 +1,45 @@
-# 📌 Catálogo Completo de Endpoints da API
+# 📌 Catálogo de Endpoints da API
 
-Abaixo está a documentação detalhada de todas as rotas HTTP disponibilizadas pela aplicação.
+Abaixo você encontra o guia prático de todas as rotas HTTP disponibilizadas pela aplicação.
 
 ---
 
-## 🧾 Módulo: Invoices (Faturas Pix)
+## 🧾 Módulo de Invoices (Faturas Pix)
 
 ### `POST /api/v1/invoices/batch`
 Gera e emite imediatamente um lote de faturas Pix no Sandbox da Stark Bank.
 
 - **Query Parameters:**
-  - `count` *(opcional, int, 1 a 50)*: Quantidade customizada de faturas. Se omitido, gera um número aleatório entre 8 e 12.
-- **Resposta Sucesso (`201 Created`):**
+  - `count` *(opcional, int)*: Quantidade de faturas a gerar. Se não informado, gera entre 8 e 12 aleatoriamente.
+- **Resposta (`201 Created`):**
 ```json
 {
-  "id": "e8d47b6a12c3498bb892471629abc123",
-  "total_amount": 145020,
+  "id": "e8d47b6a-12c3-498b-b892-471629abc123",
+  "cycle_index": 1,
   "invoice_count": 10,
-  "created_at": "2026-08-14T03:00:00.123456Z",
-  "items": [
-    {
-      "id": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
-      "stark_invoice_id": "5839201948572019",
-      "amount": 15000,
-      "tax_id": "12345678909",
-      "name": "Maria Silva",
-      "status": "created"
-    }
-  ]
+  "status": "completed",
+  "created_at": "2026-08-14T03:00:00.123456Z"
 }
 ```
 
 ---
 
 ### `GET /api/v1/invoices/batches`
-Retorna uma lista paginada de todos os lotes de faturas emitidos e seus itens associados.
+Retorna uma lista paginada de todos os lotes de faturas emitidos.
 
 - **Query Parameters:**
-  - `page` *(opcional, int, padrão: 1)*: Número da página (1-indexed).
-  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de itens por página.
-- **Resposta Sucesso (`200 OK`):**
+  - `page` *(opcional, int, padrão: 1)*: Página atual.
+  - `size` *(opcional, int, padrão: 20)*: Quantidade de itens por página.
+- **Resposta (`200 OK`):**
 ```json
 {
   "items": [
     {
-      "id": "e8d47b6a12c3498bb892471629abc123",
+      "id": "e8d47b6a-12c3-498b-b892-471629abc123",
       "cycle_index": 1,
       "invoice_count": 10,
       "status": "completed",
-      "created": "2026-08-14T03:00:00.123456Z",
-      "invoices": [...]
+      "created_at": "2026-08-14T03:00:00.123456Z"
     }
   ],
   "total": 8,
@@ -64,52 +54,28 @@ Retorna uma lista paginada de todos os lotes de faturas emitidos e seus itens as
 ---
 
 ### `GET /api/v1/invoices`
-Retorna uma lista paginada de todas as faturas individuais com suporte a filtro opcional por status.
+Retorna uma lista paginada de faturas individuais com suporte a filtro por status.
 
 - **Query Parameters:**
-  - `status` *(opcional, str)*: Filtrar por status (ex: `created`, `credited`).
-  - `page` *(opcional, int, padrão: 1)*: Número da página.
-  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de faturas por página.
-- **Resposta Sucesso (`200 OK`):**
-```json
-{
-  "items": [
-    {
-      "id": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
-      "stark_invoice_id": "5839201948572019",
-      "batch_id": "e8d47b6a12c3498bb892471629abc123",
-      "amount": 15000,
-      "tax_id": "12345678909",
-      "name": "Maria Silva",
-      "status": "credited",
-      "created": "2026-08-14T03:00:00.123456Z"
-    }
-  ],
-  "total": 80,
-  "page": 1,
-  "size": 20,
-  "pages": 4,
-  "has_next": true,
-  "has_previous": false
-}
-```
+  - `status` *(opcional, string)*: Filtrar por status (ex: `created`, `credited`).
+  - `page` *(opcional, int, padrão: 1)*: Página atual.
+  - `size` *(opcional, int, padrão: 20)*: Quantidade por página.
 
 ---
 
-## 📬 Módulo: Webhook
+## 📬 Módulo de Webhook
 
 ### `POST /api/v1/webhooks/starkbank`
-Endpoint receptor dos eventos da Stark Bank. Valida a assinatura ECDSA e despacha transferências de liquidação para faturas creditadas.
+Endpoint receptor dos eventos da Stark Bank. Valida a assinatura digital ECDSA e despacha transferências de liquidação para faturas creditadas.
 
 - **Headers Obrigatórios:**
-  - `Digital-Signature`: Assinatura digital ECDSA gerada pela Stark Bank.
+  - `Digital-Signature`: Assinatura criptográfica enviada pelo Stark Bank.
 - **Resposta Sucesso (`200 OK`):**
 ```json
 {
-  "status": "processed",
+  "status": "success",
+  "message": "Webhook processed successfully.",
   "event_id": "5738291048592018",
-  "event_type": "credited",
-  "subscription": "invoice",
   "transfer_id": "4728193847291048"
 }
 ```
@@ -118,26 +84,26 @@ Endpoint receptor dos eventos da Stark Bank. Valida a assinatura ECDSA e despach
 {
   "error": "invalid_signature",
   "code": "invalid_signature",
-  "detail": "Failed to verify ECDSA signature: Digital signature verification failed."
+  "detail": "Digital signature validation failed."
 }
 ```
 
 ---
 
-## 💸 Módulo: Transfers (Transferências)
+## 💸 Módulo de Transfers (Transferências)
 
 ### `GET /api/v1/transfers`
-Retorna uma lista paginada de todas as transferências de liquidação realizadas pelo sistema após recebimento de webhooks.
+Retorna uma lista paginada de todas as transferências de liquidação realizadas após o recebimento de webhooks.
 
 - **Query Parameters:**
-  - `page` *(opcional, int, padrão: 1)*: Número da página (1-indexed).
-  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de transferências por página.
-- **Resposta Sucesso (`200 OK`):**
+  - `page` *(opcional, int, padrão: 1)*: Página atual.
+  - `size` *(opcional, int, padrão: 20)*: Quantidade por página.
+- **Resposta (`200 OK`):**
 ```json
 {
   "items": [
     {
-      "id": "9f8e7d6c5b4a39281726354433221100",
+      "id": "9f8e7d6c-5b4a-3928-1726-354433221100",
       "stark_transfer_id": "4728193847291048",
       "stark_invoice_id": "5839201948572019",
       "event_id": "5738291048592018",
@@ -145,7 +111,7 @@ Retorna uma lista paginada de todas as transferências de liquidação realizada
       "fee": 50,
       "net_amount": 14950,
       "status": "success",
-      "created": "2026-08-14T03:15:22.000000Z"
+      "created_at": "2026-08-14T03:15:22.000000Z"
     }
   ],
   "total": 12,
@@ -159,12 +125,12 @@ Retorna uma lista paginada de todas as transferências de liquidação realizada
 
 ---
 
-## ⏰ Módulo: Scheduler (Agendador)
+## ⏰ Módulo de Scheduler (Agendador)
 
 ### `GET /api/v1/scheduler/status`
-Retorna o estado operacional do agendador, contadores de ciclos e horário da próxima execução.
+Retorna o estado do agendador, quantidade de ciclos concluídos e horário da próxima execução.
 
-- **Resposta Sucesso (`200 OK`):**
+- **Resposta (`200 OK`):**
 ```json
 {
   "scheduled_cycles_completed": 3,
@@ -181,30 +147,32 @@ Retorna o estado operacional do agendador, contadores de ciclos e horário da pr
 ---
 
 ### `POST /api/v1/scheduler/trigger`
-Dispara um ciclo manual sob demanda. O lote é emitido e gravado como `trigger_type: "manual"`, sem consumir a cota dos ciclos agendados de 24 horas.
+Dispara um ciclo manual sob demanda. O lote é gravado como `trigger_type: "manual"` e não consome a cota agendada de 24 horas.
 
-- **Resposta Sucesso (`202 Accepted`):**
+- **Resposta (`200 OK`):**
 ```json
 {
-  "message": "Manual invoice batch cycle triggered successfully."
+  "status": "success",
+  "message": "Manual cycle triggered successfully."
 }
 ```
 
 ---
 
 ### `PUT /api/v1/scheduler/mode`
-Altera dinamicamente o modo de operação do agendador sem precisar reiniciar a aplicação.
+Altera o modo de operação do agendador em runtime.
 
-- **Payload de Entrada:**
+- **Payload:**
 ```json
 {
   "mode": "recurring"
 }
 ```
-- **Resposta Sucesso (`200 OK`):**
+- **Resposta (`200 OK`):**
 ```json
 {
-  "message": "Scheduler mode successfully updated to 'recurring'.",
+  "status": "success",
+  "message": "Scheduler mode updated to recurring.",
   "mode": "recurring"
 }
 ```
@@ -212,24 +180,24 @@ Altera dinamicamente o modo de operação do agendador sem precisar reiniciar a 
 ---
 
 ### `POST /api/v1/scheduler/reset`
-Limpa o histórico de ciclos armazenados na tabela `schedule_cycles`, reiniciando os contadores de 24h.
+Limpa o histórico de ciclos armazenados no banco, reiniciando os contadores de 24 horas.
 
-- **Resposta Sucesso (`200 OK`):**
+- **Resposta (`200 OK`):**
 ```json
 {
-  "message": "Scheduler cycles reset successfully. Removed 8 record(s).",
-  "mode": "once"
+  "status": "success",
+  "message": "Scheduler cycle history reset successfully."
 }
 ```
 
 ---
 
-## 🩺 Módulo: Health Check
+## 🩺 Health Check
 
 ### `GET /health`
-Verificação de integridade (*liveness / readiness probe*) utilizada pelo Nginx, Docker e orquestradores.
+Verificação de integridade (*liveness / readiness probe*) usada pelo Docker e proxies.
 
-- **Resposta Sucesso (`200 OK`):**
+- **Resposta (`200 OK`):**
 ```json
 {
   "status": "ok",

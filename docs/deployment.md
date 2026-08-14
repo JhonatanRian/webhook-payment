@@ -1,52 +1,51 @@
 # 🚢 Deploy, Infraestrutura & CI/CD
 
-A infraestrutura e o processo de deploy contínuo foram desenhados para aliar **máxima leveza**, **segurança**, **zero-downtime** e **automação total**.
+Aqui explicamos como empacotamos e colocamos a aplicação para rodar em produção com foco em leveza (~70 MB), segurança e automação.
 
 ---
 
-## 🏗️ Arquitetura do Container Docker
+## 🏗️ Como a Imagem Docker é Construída
 
-A imagem Docker é baseada em um **Multi-Stage Build** de dois estágios:
+Usamos um **Multi-Stage Build** com Alpine Linux e Astral `uv` para gerar uma imagem ultra-compacta:
 
 ```mermaid
 flowchart TD
-    subgraph Builder ["Estágio 1: Builder (ghcr.io/astral-sh/uv:python3.12-alpine)"]
-        SYNC["uv sync --frozen --no-dev\nCompilação de Bytecode (UV_COMPILE_BYTECODE=1)"]
+    subgraph Builder ["Estágio 1: Builder (uv + Alpine)"]
+        SYNC["uv sync --frozen --no-dev\nCompila todo o bytecode Python"]
     end
 
-    subgraph Runtime ["Estágio 2: Runtime (python:3.12-alpine)"]
-        PKGS["Instala Nginx, Supervisor, tzdata, gettext"]
-        COPY["Copia /app/.venv pré-compilado (Zero compiladores no runtime)"]
-        ENTRY["docker/entrypoint.sh\n- Executa alembic upgrade head\n- Inicia Supervisord (PID 1)"]
+    subgraph Runtime ["Estágio 2: Imagem Final (Python 3.12 Alpine)"]
+        PKGS["Instala apenas Nginx e Supervisord"]
+        COPY["Copia o ambiente virtual (.venv) pré-compilado"]
+        ENTRY["entrypoint.sh\n- Roda 'alembic upgrade head'\n- Inicia o Supervisord"]
     end
 
-    Builder -->|Apenas .venv compilado| Runtime
+    Builder -->|"Apenas o virtualenv compilado"| Runtime
 ```
 
-### Destaques da Imagem:
-- **Tamanho Total Comprimido:** Apenas **~70.5 MB**.
-- **Segurança Máxima:** Não contém compiladores (`gcc`, `musl-dev`) no runtime final.
-- **Performance:** Bytecode Python pré-compilado acelera o tempo de inicialização (*cold start*).
-- **Socket Unix de Alta Velocidade:** Nginx comunica diretamente com o Uvicorn via socket Unix local (`unix:/tmp/app.sock`), eliminando overhead de rede TCP interna.
+### Principais Vantagens:
+- **Tamanho Reduzido**: A imagem final compactada fica em apenas **~70 MB**.
+- **Segurança**: Ferramentas de compilação (`gcc`, `musl-dev`) são descartadas no primeiro estágio, mantendo o container de execução limpo.
+- **Nginx via Unix Socket**: O Nginx conversa com o Uvicorn através de um socket Unix local (`/tmp/app.sock`), o que é muito mais rápido do que fazer requisições TCP internas em `localhost:8000`.
 
 ---
 
 ## 🤖 Pipeline de CI/CD (GitHub Actions)
 
-A pipeline em [`.github/workflows/deploy.yml`](file:///home/jhonatan/projects/webhook-payment/.github/workflows/deploy.yml) é acionada a cada commit ou merge na branch `master`:
+Toda vez que um commit entra na branch `master`, a esteira do GitHub Actions executa os seguintes passos:
 
 ```mermaid
 flowchart LR
-    PUSH["Git Push to 'master'"] --> TEST["1. Quality Gate\n- Ruff Format & Lint\n- Pytest (103 Testes)\n- Codecov Upload"]
-    TEST --> BUILD["2. Build & Push GHCR\n- Docker Buildx + GHA Cache\n- ghcr.io/jhonatanrian/webhook-payment"]
-    BUILD --> PORTAINER["3. Portainer Webhook\n- POST https://portainer.../api/webhooks/...\n- VPS atualiza container em 3s"]
+    PUSH["Push na branch 'master'"] --> TEST["1. Qualidade & Testes\n- Ruff Format & Lint\n- Pytest (100% Cobertura)\n- Codecov Upload"]
+    TEST --> BUILD["2. Build da Imagem\n- Cria imagem Docker com cache\n- Publica no GitHub Container Registry"]
+    BUILD --> DEPLOY["3. Notificação de Deploy\n- Aciona o Webhook do Portainer\n- VPS atualiza o container em segundos"]
 ```
 
 ---
 
-## 🌐 Deploy em VPS com Portainer & Traefik v3
+## 🌐 Rodando em VPS com Portainer & Traefik v3
 
-A aplicação roda em uma VPS própria integrada com o **Portainer** e o proxy reverso **Traefik v3**:
+Abaixo está o exemplo de `docker-compose.yml` utilizado para subir a aplicação em uma VPS com Traefik cuidando do HTTPS automático:
 
 ```yaml
 version: "3.8"
@@ -85,8 +84,19 @@ networks:
     external: true
 ```
 
-### Vantagens Desta Configuração:
-1. **IP Fixo Estático Garantido:** A VPS possui um IP público fixo cadastrado com perfil de Admin no Stark Bank, permitindo emissões e transferências sem bloqueios de IP.
-2. **Persistência do SQLite:** O volume Docker nomeado (`webhook_payment_data`) persiste os dados no disco da VPS independentemente de reinicializações ou updates de versão.
-3. **SSL Automático com Let's Encrypt:** O Traefik emite e renova os certificados HTTPS automaticamente sem intervenção manual.
-4. **Deploy sem Downtime:** O webhook do Portainer recria o container preservando o volume de dados em poucos segundos.
+### Detalhes Práticos:
+1. **Persistência de Dados**: O banco SQLite fica salvo no volume nomeado `/data`, garantindo que os dados não sejam perdidos quando o container é recriado.
+2. **SSL Automático**: O Traefik emite e renova os certificados Let's Encrypt automaticamente.
+3. **IP Fixo**: A VPS possui um IP público fixo, ideal para cadastrar no painel do Stark Bank.
+
+---
+
+## 📊 Telemetria & Consumo Real em Produção
+
+Abaixo estão as métricas reais coletadas do container rodando continuamente na VPS através do Portainer:
+
+![Métricas do Container em Produção](assets/server-metrics.png)
+
+- **Uso de Memória**: Apenas **~3.5 MB de RAM**, demonstrando a eficiência do runtime Alpine + Uvicorn.
+- **Uso de CPU**: Praticamente **0.0% a 0.2%**, com picos desprezíveis durante a emissão de faturas e processamento de webhooks.
+- **I/O e Rede**: Leituras e escritas assíncronas no SQLite sem gargalos de disco.
