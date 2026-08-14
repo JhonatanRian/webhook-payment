@@ -10,8 +10,9 @@ from app.shared.models import BaseModel
 class ScheduleCycleRecord(BaseModel):
     __tablename__ = "schedule_cycles"
 
-    cycle_index: Mapped[int] = mapped_column(Integer, unique=True, nullable=False, index=True)
+    cycle_index: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     status: Mapped[str] = mapped_column(String, default="completed", nullable=False)
+    trigger_type: Mapped[str] = mapped_column(String, default="scheduled", nullable=False)
     executed_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),
