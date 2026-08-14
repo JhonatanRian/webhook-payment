@@ -34,7 +34,6 @@ class BaseRepository[ModelType: DeclarativeBase]:
             await self.session.refresh(obj_in)
         else:
             await self.session.flush()
-            await self.session.refresh(obj_in)
         return obj_in
 
     async def get(self, id: Any) -> ModelType | None:
