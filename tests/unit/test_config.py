@@ -43,3 +43,29 @@ def test_tax_id_sanitizer() -> None:
     settings = Settings(TARGET_TAX_ID="20.018.183/0001-80")
     assert settings.TARGET_TAX_ID == "20018183000180"
 
+
+def test_scheduler_mode_sanitizer() -> None:
+    assert Settings(SCHEDULER_MODE="once").SCHEDULER_MODE == "once"
+    assert Settings(SCHEDULER_MODE="RECURRING").SCHEDULER_MODE == "recurring"
+    assert Settings(SCHEDULER_MODE="invalid").SCHEDULER_MODE == "once"
+
+
+def test_scheduler_interval_minutes_sanitizer() -> None:
+    assert Settings(SCHEDULER_INTERVAL_MINUTES="60").SCHEDULER_INTERVAL_MINUTES == 60
+    assert Settings(SCHEDULER_INTERVAL_MINUTES="-5").SCHEDULER_INTERVAL_MINUTES == 180
+    assert Settings(SCHEDULER_INTERVAL_MINUTES="0").SCHEDULER_INTERVAL_MINUTES == 180
+    assert Settings(SCHEDULER_INTERVAL_MINUTES="abc").SCHEDULER_INTERVAL_MINUTES == 180
+
+
+def test_scheduler_max_cycles_sanitizer() -> None:
+    assert Settings(SCHEDULER_MAX_CYCLES="12").SCHEDULER_MAX_CYCLES == 12
+    assert Settings(SCHEDULER_MAX_CYCLES="1").SCHEDULER_MAX_CYCLES == 1
+    assert Settings(SCHEDULER_MAX_CYCLES="0").SCHEDULER_MAX_CYCLES == 8
+    assert Settings(SCHEDULER_MAX_CYCLES="-10").SCHEDULER_MAX_CYCLES == 8
+    assert Settings(SCHEDULER_MAX_CYCLES="invalid").SCHEDULER_MAX_CYCLES == 8
+
+
+def test_scheduler_explicit_max_cycles_property() -> None:
+    assert Settings(SCHEDULER_MAX_CYCLES=8).max_cycles == 8
+    assert Settings(SCHEDULER_MAX_CYCLES=12).max_cycles == 12
+    assert Settings(SCHEDULER_MAX_CYCLES=24).max_cycles == 24

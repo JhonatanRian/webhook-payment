@@ -4,6 +4,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions.domain_exceptions import BusinessRuleViolationError
+from app.core.exceptions.starkbank_exceptions import StarkBankIntegrationError
 from app.modules.transfer.repository import TransferRepository
 from app.modules.transfer.service import TransferService
 
@@ -49,7 +50,7 @@ async def test_transfer_credited_invoice_failure_branch(db_session: AsyncSession
     service = TransferService(session=db_session)
 
     with patch("starkbank.transfer.create", side_effect=RuntimeError("Transfer SDK Error")):
-        with pytest.raises(RuntimeError):
+        with pytest.raises(StarkBankIntegrationError):
             await service.transfer_credited_invoice(
                 gross_amount=2000,
                 fee=100,

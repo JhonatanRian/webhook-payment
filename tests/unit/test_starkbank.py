@@ -43,4 +43,3 @@ def test_setup_starkbank_user_with_key_path(tmp_path: Path) -> None:
     assert project is not None
     assert isinstance(project, starkbank.Project)
     assert starkbank.user == project
-

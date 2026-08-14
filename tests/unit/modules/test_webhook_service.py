@@ -8,6 +8,8 @@ from app.core.exceptions.domain_exceptions import (
     DuplicateEventError,
     WebhookSignatureError,
 )
+from app.modules.invoice.model import InvoiceRecord
+from app.modules.invoice.repository import InvoiceRecordRepository
 from app.modules.webhook.service import WebhookService
 
 
@@ -37,6 +39,17 @@ async def test_webhook_general_parsing_exception(db_session: AsyncSession) -> No
 async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
 
+    # Pre-create an invoice record in DB
+    inv_repo = InvoiceRecordRepository(session=db_session)
+    local_inv = InvoiceRecord(
+        stark_invoice_id="inv_100",
+        amount=20000,
+        tax_id="12345678901",
+        name="Test User",
+        status="created",
+    )
+    await inv_repo.create(local_inv, autocommit=True)
+
     mock_invoice = MagicMock(id="inv_100", amount=20000, fee=100)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_555", subscription="invoice", log=mock_log)
@@ -59,7 +72,12 @@ async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
                 fee=100,
                 stark_invoice_id="inv_100",
                 event_id="evt_555",
+                autocommit=False,
             )
+
+    updated_inv = await inv_repo.get_by_stark_id("inv_100")
+    assert updated_inv is not None
+    assert updated_inv.status == "credited"
 
 
 async def test_webhook_non_credited_event(db_session: AsyncSession) -> None:

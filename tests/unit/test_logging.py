@@ -44,4 +44,3 @@ def test_setup_logging_explicit_json_format() -> None:
     setup_logging(custom_settings=cfg)
     root_logger = logging.getLogger()
     assert root_logger.handlers[0].formatter is not None
-
