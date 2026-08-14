@@ -3,7 +3,7 @@ set -e
 
 # Default port for GCP Cloud Run and container environments
 export PORT="${PORT:-8080}"
-export WEB_CONCURRENCY="${WEB_CONCURRENCY:-2}"
+export WEB_CONCURRENCY="${WEB_CONCURRENCY:-1}"
 umask 000
 
 echo "[entrypoint] Configuring Nginx for PORT=${PORT} and Uvicorn for WORKERS=${WEB_CONCURRENCY}..."

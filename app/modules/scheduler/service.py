@@ -2,7 +2,6 @@ import logging
 from datetime import datetime
 from typing import Literal
 
-from apscheduler.jobstores.sqlalchemy import SQLAlchemyJobStore
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 SchedulerMode = Literal["once", "recurring"]
 
-jobstores = {"default": SQLAlchemyJobStore(url=settings.SCHEDULER_JOBSTORE_URL)}
-scheduler = AsyncIOScheduler(jobstores=jobstores)
+scheduler = AsyncIOScheduler()
 
 current_mode: SchedulerMode = settings.SCHEDULER_MODE
 
@@ -44,7 +42,9 @@ def get_next_run_time() -> datetime | None:
     return None
 
 
-async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode: str) -> None:
+async def _run_cycle_with_session(
+    session: AsyncSession, trigger_type: str, mode: str
+) -> None:
     max_cycles = settings.max_cycles
     cycle_repo = ScheduleCycleRepository(session=session)
 
@@ -74,7 +74,9 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
                     max_cycles,
                 )
                 return
-            total_scheduled = await cycle_repo.get_completed_cycle_count(trigger_type="scheduled")
+            total_scheduled = await cycle_repo.get_completed_cycle_count(
+                trigger_type="scheduled"
+            )
             cycle_index = total_scheduled + 1
 
         logger.info("Starting SCHEDULED cycle %d/%d (%s)...", cycle_index, max_cycles, mode)
@@ -121,30 +123,32 @@ async def execute_cycle_job(
 
 
 def start_scheduler(run_on_startup: bool = True) -> None:
-    if not scheduler.running:
-        job = scheduler.get_job("invoice_batch_cycle_job")
-        if job:
-            scheduler.reschedule_job(
-                "invoice_batch_cycle_job",
-                trigger="interval",
-                minutes=settings.SCHEDULER_INTERVAL_MINUTES,
+    try:
+        if not scheduler.running:
+            job = scheduler.get_job("invoice_batch_cycle_job")
+            if job:
+                scheduler.reschedule_job(
+                    "invoice_batch_cycle_job",
+                    trigger="interval",
+                    minutes=settings.SCHEDULER_INTERVAL_MINUTES,
+                )
+            else:
+                scheduler.add_job(
+                    execute_cycle_job,
+                    trigger="interval",
+                    minutes=settings.SCHEDULER_INTERVAL_MINUTES,
+                    id="invoice_batch_cycle_job",
+                    replace_existing=True,
+                    coalesce=True,
+                    misfire_grace_time=3600,
+                )
+            scheduler.start()
+            logger.info(
+                "APScheduler started (interval: %d min, coalesce=True, misfire_grace_time=3600).",
+                settings.SCHEDULER_INTERVAL_MINUTES,
             )
-        else:
-            scheduler.add_job(
-                execute_cycle_job,
-                trigger="interval",
-                minutes=settings.SCHEDULER_INTERVAL_MINUTES,
-                id="invoice_batch_cycle_job",
-                replace_existing=True,
-                coalesce=True,
-                misfire_grace_time=3600,
-            )
-        scheduler.start()
-        logger.info(
-            "APScheduler started with SQLAlchemyJobStore (interval: %d min, "
-            "coalesce=True, misfire_grace_time=3600).",
-            settings.SCHEDULER_INTERVAL_MINUTES,
-        )
+    except Exception as err:
+        logger.error("Failed to start scheduler: %s", err)
 
 
 def stop_scheduler() -> None:
