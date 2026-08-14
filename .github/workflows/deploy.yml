@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - GCP Artifact Registry
+name: CI/CD Pipeline - GCP Artifact Registry & Cloud Run
 
 on:
   push:
@@ -49,10 +49,10 @@ jobs:
         run: uv run pytest -v --cov=app --cov-report=term-missing
 
   # ============================================================================
-  # Job 2: Build & Push Docker Image to GCP Artifact Registry
+  # Job 2: Build & Push Docker Image + Continuous Deployment to Cloud Run
   # ============================================================================
   build-and-push:
-    name: Build & Push to GCP Artifact Registry
+    name: Build, Push & Deploy to Cloud Run
     needs: test
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
@@ -99,3 +99,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: webhook-payment
+          image: ${{ env.GAR_LOCATION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ env.GAR_REPOSITORY }}/${{ env.IMAGE_NAME }}:latest
+          region: ${{ env.GAR_LOCATION }}
