@@ -6,8 +6,8 @@ A suíte de testes foi construída com foco em **confiabilidade financeira**, **
 
 ## 📊 Métricas da Suíte de Testes
 
-- **Total de Testes:** **99 testes automatizados**.
-- **Tempo de Execução:** ~9.7 segundos.
+- **Total de Testes:** **103 testes automatizados**.
+- **Tempo de Execução:** ~10.6 segundos.
 - **Cobertura de Código (Coverage):** **100.00%** *(com barreira mínima de 90% configurada no `pyproject.toml`)*.
 - **Integração com Codecov:** Relatórios detalhados de cobertura (`coverage.xml`) e resultados de execução JUnit (`junit.xml`).
 
