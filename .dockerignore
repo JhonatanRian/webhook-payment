@@ -1,0 +1,36 @@
+# Git
+.git/
+.gitignore
+
+# Python & Virtualenv
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Testing & Coverage
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+tests/
+
+# Documentation & Local Notes
+docs/
+*.md
+!README.md
+*.png
+
+# Secrets & Local Databases
+.env
+*.pem
+*.db
+*.sqlite
+*.sqlite3
+
+# IDE / OS
+.DS_Store
+.idea/
+.vscode/
