@@ -1,28 +1,34 @@
 import math
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any
+from typing import Annotated, Self
 
 from fastapi import Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class PaginationParams:
-    """Query parameter dependency for list pagination."""
+    """Query parameter dependency for paginated list endpoints."""
 
     def __init__(
         self,
-        page: int = Query(
-            default=1,
-            ge=1,
-            description="Page number (1-indexed)",
-        ),
-        size: int = Query(
-            default=20,
-            ge=1,
-            le=100,
-            description="Number of items per page (maximum 100)",
-        ),
+        page: Annotated[
+            int,
+            Query(
+                ge=1,
+                description="Page number (1-indexed)",
+                examples=[1],
+            ),
+        ] = 1,
+        size: Annotated[
+            int,
+            Query(
+                ge=1,
+                le=100,
+                description="Number of records per page (max: 100)",
+                examples=[20],
+            ),
+        ] = 20,
     ) -> None:
         self.page = page
         self.size = size
@@ -38,7 +44,7 @@ class PaginationParams:
 
 @dataclass(frozen=True, slots=True)
 class PaginatedResult[ModelType]:
-    """Internal database result encapsulation holding items and total count."""
+    """Encapsulates raw query results with total count before serialization."""
 
     items: Sequence[ModelType]
     total: int
@@ -47,23 +53,57 @@ class PaginatedResult[ModelType]:
 
 
 class Page[T](BaseModel):
-    """Standardized generic paginated response payload."""
+    """Standardized generic paginated response payload compliant with OpenAPI/Swagger."""
 
-    items: Sequence[T] = Field(..., description="List of items for the current page")
-    total: int = Field(..., ge=0, description="Total number of items matching the query")
-    page: int = Field(..., ge=1, description="Current page number (1-indexed)")
-    size: int = Field(..., ge=1, description="Page size limit")
-    pages: int = Field(..., ge=0, description="Total number of pages")
-    has_next: bool = Field(..., description="Whether a subsequent page exists")
-    has_previous: bool = Field(..., description="Whether a preceding page exists")
+    model_config = ConfigDict(from_attributes=True)
+
+    items: Sequence[T] = Field(
+        ...,
+        description="List of records for the current page",
+    )
+    total: int = Field(
+        ...,
+        ge=0,
+        description="Total number of records matching the query",
+        examples=[100],
+    )
+    page: int = Field(
+        ...,
+        ge=1,
+        description="Current page number (1-indexed)",
+        examples=[1],
+    )
+    size: int = Field(
+        ...,
+        ge=1,
+        le=100,
+        description="Page size limit",
+        examples=[20],
+    )
+    pages: int = Field(
+        ...,
+        ge=0,
+        description="Total number of pages",
+        examples=[5],
+    )
+    has_next: bool = Field(
+        ...,
+        description="Whether a subsequent page exists",
+        examples=[True],
+    )
+    has_previous: bool = Field(
+        ...,
+        description="Whether a preceding page exists",
+        examples=[False],
+    )
 
     @classmethod
     def create(
         cls,
-        items: Sequence[Any],
+        items: Sequence[T],
         total: int,
         params: PaginationParams,
-    ) -> "Page[T]":
+    ) -> Self:
         pages = math.ceil(total / params.size) if total > 0 else 0
         has_next = params.page < pages
         has_previous = params.page > 1 and total > 0
