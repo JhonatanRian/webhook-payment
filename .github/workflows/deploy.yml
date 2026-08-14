@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - master
+  pull_request:
+    branches:
+      - master
   workflow_dispatch:
 
 env:
@@ -51,6 +54,7 @@ jobs:
   build-and-push:
     name: Build & Push to GCP Artifact Registry
     needs: test
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
 
     permissions:
