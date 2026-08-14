@@ -1,11 +1,10 @@
-from collections.abc import Sequence
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infra.db.session import get_db
-from app.modules.invoice.schema import InvoiceBatchResponse
+from app.modules.invoice.schema import InvoiceBatchResponse, InvoiceResponse
 from app.modules.invoice.service import InvoiceService
+from app.shared.pagination import Page, PaginationParams
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
 
@@ -30,13 +29,40 @@ async def trigger_invoice_batch(
 
 @router.get(
     "/batches",
-    response_model=list[InvoiceBatchResponse],
-    summary="List invoice batches",
-    description="Returns all issued invoice batches with their associated invoice items.",
+    response_model=Page[InvoiceBatchResponse],
+    summary="List invoice batches (paginated)",
+    description=(
+        "Returns a paginated list of issued invoice batches with their associated invoice items."
+    ),
 )
 async def list_invoice_batches(
+    params: PaginationParams = Depends(),
     db: AsyncSession = Depends(get_db),
-) -> Sequence[InvoiceBatchResponse]:
+) -> Page[InvoiceBatchResponse]:
     service = InvoiceService(session=db)
-    batches = await service.batch_repo.get_all()
-    return [InvoiceBatchResponse.model_validate(b) for b in batches]
+    result = await service.batch_repo.paginate_batches(params=params)
+    items = [InvoiceBatchResponse.model_validate(b) for b in result.items]
+    return Page.create(items=items, total=result.total, params=params)
+
+
+@router.get(
+    "",
+    response_model=Page[InvoiceResponse],
+    summary="List individual invoices (paginated)",
+    description=(
+        "Returns a paginated list of all individual invoice records with optional status filtering."
+    ),
+)
+async def list_invoices(
+    status_filter: str | None = Query(
+        default=None,
+        alias="status",
+        description="Filter invoices by status (e.g. 'created', 'credited')",
+    ),
+    params: PaginationParams = Depends(),
+    db: AsyncSession = Depends(get_db),
+) -> Page[InvoiceResponse]:
+    service = InvoiceService(session=db)
+    result = await service.record_repo.paginate_invoices(params=params, status=status_filter)
+    items = [InvoiceResponse.model_validate(i) for i in result.items]
+    return Page.create(items=items, total=result.total, params=params)

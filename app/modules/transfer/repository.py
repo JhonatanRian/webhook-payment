@@ -1,7 +1,8 @@
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.modules.transfer.model import TransferRecord
+from app.shared.pagination import PaginatedResult, PaginationParams
 from app.shared.repository import BaseRepository
 
 
@@ -18,3 +19,10 @@ class TransferRepository(BaseRepository[TransferRecord]):
         query = select(TransferRecord).where(TransferRecord.stark_invoice_id == stark_invoice_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def paginate_transfers(
+        self,
+        params: PaginationParams,
+    ) -> PaginatedResult[TransferRecord]:
+        query = select(TransferRecord).order_by(desc(TransferRecord.created))
+        return await self.paginate(params=params, query=query)

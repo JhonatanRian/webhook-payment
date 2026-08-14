@@ -2,9 +2,11 @@ from collections.abc import Sequence
 from typing import Any, Protocol
 
 from pydantic import BaseModel as PydanticBaseModel
-from sqlalchemy import select
+from sqlalchemy import Select, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import DeclarativeBase
+
+from app.shared.pagination import PaginatedResult, PaginationParams
 
 
 class RepositoryProtocol[ModelType: DeclarativeBase](Protocol):
@@ -20,6 +22,11 @@ class RepositoryProtocol[ModelType: DeclarativeBase](Protocol):
         obj_in: dict[str, Any] | PydanticBaseModel,
         autocommit: bool = True,
     ) -> ModelType: ...
+    async def paginate(
+        self,
+        params: PaginationParams,
+        query: Select | None = None,
+    ) -> PaginatedResult[ModelType]: ...
 
 
 class BaseRepository[ModelType: DeclarativeBase]:
@@ -69,3 +76,28 @@ class BaseRepository[ModelType: DeclarativeBase]:
         else:
             await self.session.flush()
         return db_obj
+
+    async def paginate(
+        self,
+        params: PaginationParams,
+        query: Select | None = None,
+    ) -> PaginatedResult[ModelType]:
+        """Performs optimized COUNT and LIMIT/OFFSET pagination."""
+        base_query = query if query is not None else select(self.model)
+
+        # Build efficient scalar count query without loading model records
+        count_subquery = base_query.order_by(None).subquery()
+        count_query = select(func.count()).select_from(count_subquery)
+        total_count = await self.session.scalar(count_query) or 0
+
+        # Apply LIMIT and OFFSET
+        paginated_query = base_query.offset(params.offset).limit(params.limit)
+        result = await self.session.execute(paginated_query)
+        items = result.scalars().all()
+
+        return PaginatedResult(
+            items=items,
+            total=total_count,
+            page=params.page,
+            size=params.size,
+        )

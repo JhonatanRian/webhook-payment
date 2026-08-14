@@ -18,6 +18,24 @@ async def test_trigger_invoice_batch_api(async_client: AsyncClient) -> None:
 
 
 async def test_list_invoice_batches_api(async_client: AsyncClient) -> None:
-    res = await async_client.get("/api/v1/invoices/batches")
+    res = await async_client.get("/api/v1/invoices/batches?page=1&size=10")
     assert res.status_code == 200
-    assert isinstance(res.json(), list)
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+    assert "page" in data
+    assert "size" in data
+    assert data["page"] == 1
+    assert data["size"] == 10
+    assert isinstance(data["items"], list)
+
+
+async def test_list_invoices_api(async_client: AsyncClient) -> None:
+    res = await async_client.get("/api/v1/invoices?page=1&size=10&status=created")
+    assert res.status_code == 200
+    data = res.json()
+    assert "items" in data
+    assert "total" in data
+    assert data["page"] == 1
+    assert data["size"] == 10
+    assert isinstance(data["items"], list)

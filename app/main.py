@@ -15,7 +15,6 @@ from app.modules.scheduler.service import start_scheduler, stop_scheduler
 from app.modules.transfer.router import router as transfer_router
 from app.modules.webhook.router import router as webhook_router
 
-# Configure centralized logging system
 setup_logging()
 
 logger = logging.getLogger(__name__)
@@ -23,12 +22,10 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
-    # Startup actions
     setup_starkbank_user()
     await init_db()
     start_scheduler()
     yield
-    # Shutdown actions
     stop_scheduler()
 
 
@@ -39,13 +36,9 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# Register request logging middleware
 app.add_middleware(RequestLoggingMiddleware)
-
-# Register global exception handlers
 register_exception_handlers(app)
 
-# Include domain module routers
 app.include_router(webhook_router)
 app.include_router(invoice_router)
 app.include_router(transfer_router)

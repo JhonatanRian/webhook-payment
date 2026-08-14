@@ -9,6 +9,19 @@ FastAPI application built with a **Modular Monolith** architecture for payment a
 
 ---
 
+## 📖 Conheça o Projeto (Documentação Completa)
+
+Acesse o portal completo de documentação publicado no **[GitHub Pages](https://jhonatanrian.github.io/webhook-payment/)** ou navegue pelos tópicos na pasta [`docs/`](docs/index.md):
+
+* 🏛️ **[Arquitetura & Design de Software](docs/architecture.md)** — Estrutura em Monólito Modular, separação em 4 camadas e banco assíncrono.
+* 📋 **[Regras de Negócio & Ciclos de 24h](docs/business-rules.md)** — Motor do agendador, modos `once` vs `recurring`, cálculo de valor líquido e assinaturas ECDSA.
+* 📌 **[Catálogo Completo de Endpoints](docs/api-reference.md)** — Especificação de rotas, contratos de entrada/saída e códigos de status.
+* 🚢 **[Deploy, Infraestrutura & CI/CD](docs/deployment.md)** — Imagem Alpine de 70 MB com `uv`, GHCR, Portainer Webhooks e Traefik v3.
+* 🧪 **[Estratégia de Testes & Qualidade](docs/testing.md)** — 103 testes automatizados, concorrência adversarial, idempotência e cobertura de 100%.
+* 🛠️ **[Ferramental, Linters & Configurações](docs/tooling.md)** — Astral `uv`, Ruff, configurações do `pyproject.toml` e Git pre-push hooks.
+
+---
+
 ## 🔑 Prerequisites: ECDSA Private & Public Keys
 
 To authenticate and operate with Stark Bank (Sandbox or Production), you need an **ECDSA key pair** (`secp256k1`).

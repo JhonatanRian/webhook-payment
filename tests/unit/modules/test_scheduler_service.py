@@ -8,6 +8,7 @@ from app.modules.scheduler.service import (
     execute_cycle_job,
     get_current_mode,
     get_next_run_time,
+    scheduler,
     set_current_mode,
     start_scheduler,
     stop_scheduler,
@@ -62,7 +63,7 @@ async def test_execute_cycle_job_once_mode_limit(db_session: AsyncSession) -> No
     assert scheduled_count == 8
 
 
-async def test_execute_cycle_job_recurring_mode(db_session: AsyncSession) -> None:
+async def test_execute_cycle_job_recurring_mode_limit(db_session: AsyncSession) -> None:
     set_current_mode("recurring")
     repo = ScheduleCycleRepository(session=db_session)
     for i in range(1, 9):
@@ -76,6 +77,22 @@ async def test_execute_cycle_job_recurring_mode(db_session: AsyncSession) -> Non
     with patch("app.modules.scheduler.service.AsyncSessionLocal", return_value=db_session):
         await execute_cycle_job(trigger_type="scheduled")
 
+    set_current_mode("once")
+
+
+async def test_execute_cycle_job_recurring_mode_under_limit(db_session: AsyncSession) -> None:
+    set_current_mode("recurring")
+    mock_batch = MagicMock(id=None, invoice_count=10)
+
+    with patch("app.modules.scheduler.service.AsyncSessionLocal", return_value=db_session):
+        with patch(
+            "app.modules.invoice.service.InvoiceService.issue_batch", return_value=mock_batch
+        ):
+            await execute_cycle_job(trigger_type="scheduled")
+
+    repo = ScheduleCycleRepository(session=db_session)
+    count = await repo.get_completed_cycle_count(trigger_type="scheduled")
+    assert count == 1
     set_current_mode("once")
 
 
@@ -100,3 +117,18 @@ async def test_start_and_stop_scheduler() -> None:
     start_scheduler()
     _ = get_next_run_time()
     stop_scheduler()
+
+    # Test when scheduler is not running but job exists
+    mock_sched = MagicMock()
+    mock_sched.running = False
+    mock_sched.get_job.return_value = MagicMock()
+    with patch("app.modules.scheduler.service.scheduler", mock_sched):
+        start_scheduler()
+        assert mock_sched.reschedule_job.called
+
+
+def test_start_scheduler_exception_handling() -> None:
+    with patch.object(scheduler, "add_job", side_effect=RuntimeError("APScheduler error")):
+        with patch.object(scheduler, "get_job", return_value=None):
+            # Should not raise exception
+            start_scheduler()
