@@ -20,7 +20,6 @@ def test_pagination_params_offset_and_limit() -> None:
 
 
 def test_page_create_math_calculations() -> None:
-    # Page 1 of 3
     p1 = PaginationParams(page=1, size=20)
     page_obj = Page[str].create(items=["a", "b"], total=45, params=p1)
     assert page_obj.total == 45
@@ -30,14 +29,12 @@ def test_page_create_math_calculations() -> None:
     assert page_obj.has_next is True
     assert page_obj.has_previous is False
 
-    # Page 2 of 3
     p2 = PaginationParams(page=2, size=20)
     page_obj_2 = Page[str].create(items=["c", "d"], total=45, params=p2)
     assert page_obj_2.page == 2
     assert page_obj_2.has_next is True
     assert page_obj_2.has_previous is True
 
-    # Page 3 of 3 (last page)
     p3 = PaginationParams(page=3, size=20)
     page_obj_3 = Page[str].create(items=["e"], total=45, params=p3)
     assert page_obj_3.page == 3
@@ -58,12 +55,10 @@ def test_page_create_empty_dataset() -> None:
 async def test_base_repository_paginate_empty_and_populated(db_session: AsyncSession) -> None:
     repo = BaseRepository(model=TransferRecord, session=db_session)
 
-    # Empty dataset
     res_empty = await repo.paginate(params=PaginationParams(page=1, size=10))
     assert res_empty.total == 0
     assert len(res_empty.items) == 0
 
-    # Populate 15 items
     for i in range(1, 16):
         await repo.create(
             TransferRecord(
@@ -82,12 +77,10 @@ async def test_base_repository_paginate_empty_and_populated(db_session: AsyncSes
         )
     await db_session.commit()
 
-    # Query Page 1 (size=10)
     res_p1 = await repo.paginate(params=PaginationParams(page=1, size=10))
     assert res_p1.total == 15
     assert len(res_p1.items) == 10
 
-    # Query Page 2 (size=10)
     res_p2 = await repo.paginate(params=PaginationParams(page=2, size=10))
     assert res_p2.total == 15
     assert len(res_p2.items) == 5
@@ -135,11 +128,9 @@ async def test_invoice_record_repository_paginate_with_filter(db_session: AsyncS
         autocommit=True,
     )
 
-    # Paginate all
     all_res = await inv_repo.paginate_invoices(params=PaginationParams(page=1, size=10))
     assert all_res.total == 2
 
-    # Paginate filtered by credited
     credited_res = await inv_repo.paginate_invoices(
         params=PaginationParams(page=1, size=10), status="credited"
     )
