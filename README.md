@@ -1,12 +1,12 @@
 # Webhook Payment Integration with Stark Bank
 
-Aplicação FastAPI desenvolvida em arquitectura de Monólito Modular (*Modular Monolith*) para integração de pagamentos e webhooks com a API Sandbox da Stark Bank. O sistema emite faturas em lote a cada 3 horas via APScheduler, recebe notificações de crédito via Webhook POST ECDSA e realiza transferências automáticas de saldo para a conta destino da Stark Bank.
+FastAPI application built with a **Modular Monolith** architecture for payment and webhook integration with the Stark Bank Sandbox API. The system issues batches of 8 to 12 invoices at configurable intervals (`SCHEDULER_INTERVAL_MINUTES`, default 180 min / 3 hours) via APScheduler over a 24-hour cycle, receives credit notifications via ECDSA-signed Webhooks, and automatically transfers credited net amounts to the designated Stark Bank account.
 
 ---
 
-## Como Rodar o Projeto
+## Getting Started
 
-### 1. Instalar depedências com uv
+### 1. Install Dependencies with `uv`
 
 ```bash
 uv sync --dev
@@ -14,20 +14,18 @@ uv sync --dev
 
 ---
 
-### 2. Configurar Variáveis de Ambiente (`.env`)
+### 2. Configure Environment Variables (`.env`)
 
-Copie o arquivo de exemplo `.env.example` para `.env`:
+Copy the example configuration file:
 ```bash
 cp .env.example .env
 ```
 
-Ajuste as credenciais `STARK_PROJECT_ID` e `STARK_PRIVATE_KEY` conforme necessário.
+Configure your `STARK_PROJECT_ID` and `STARK_PRIVATE_KEY` (or `STARK_PRIVATE_KEY_PATH`) accordingly.
 
 ---
 
-### 3. Rodar Migrações do Banco de Dados (SQLite + Alembic)
-
-Para aplicar as migrações e criar o esquema das tabelas SQLite:
+### 3. Run Database Migrations (SQLite + Alembic)
 
 ```bash
 alembic upgrade head
@@ -35,57 +33,57 @@ alembic upgrade head
 
 ---
 
-### 4. Executar o Servidor de Desenvolvimento (FastAPI)
+### 4. Start the Development Server (FastAPI)
 
 ```bash
 uvicorn app.main:app --reload
 ```
 
-Acesse a documentação interativa das APIs:
+Interactive API documentation:
 - **Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
 - **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
 
 ---
 
-## 🧪 Suíte de Testes
+## 🧪 Test Suite
 
-Executar todos os testes unitários e de integração com Pytest:
+Run unit and integration tests with Pytest and coverage report:
 
 ```bash
-uv run pytest -v
+uv run pytest -v --cov=app --cov-report=term-missing
 ```
 
 ---
 
-## 🧹 Qualidade de Código & Linter (Ruff)
+## 🧹 Code Quality & Linter (Ruff)
 
-O projeto utiliza o **Ruff** configurado com as regras PEP 8 (`E`, `F`, `W`), complexidade ciclomática (`C90`), ordenação de imports (`I` / `isort`) e modernização de tipagem Python (`UP` / `pyupgrade`):
-
-* **Verificar linter e imports não utilizados/desorganizados:**
+* **Check lint and import ordering:**
   ```bash
-  ruff check .
+  uv run ruff check .
   ```
 
-* **Corrigir automaticamente regras do linter e ordenar imports:**
+* **Automatically fix lint issues:**
   ```bash
-  ruff check --fix .
+  uv run ruff check --fix .
   ```
 
-* **Formatar o código:**
+* **Format codebase:**
   ```bash
-  ruff format .
+  uv run ruff format .
   ```
 
 ---
 
-## 📌 Principais Endpoints da API
+## 📌 API Endpoints
 
-| Método | Endpoint | Descrição |
+| Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/webhooks/starkbank` | Endpoint principal de Webhook que valida assinatura ECDSA e agenda transferência |
-| `POST` | `/api/v1/invoices/batch` | Dispara manualmente um lote de 8 a 12 faturas com dados fictícios (`Faker`) |
-| `GET` | `/api/v1/invoices/batches` | Lista todos os lotes de faturas emitidos |
-| `GET` | `/api/v1/transfers` | Lista os registros de transferências realizadas |
-| `GET` | `/api/v1/scheduler/status` | Retorna o status do agendador (ciclos executados de 1 a 8) |
-| `POST` | `/api/v1/scheduler/trigger` | Dispara manualmente o ciclo do agendador |
-| `GET` | `/health` | Health check da aplicação |
+| `POST` | `/api/v1/webhooks/starkbank` | Webhook endpoint validating ECDSA signatures and dispatching payouts |
+| `POST` | `/api/v1/invoices/batch` | Manually triggers issuance of a batch of 8–12 invoices |
+| `GET` | `/api/v1/invoices/batches` | Lists all issued invoice batches and items |
+| `GET` | `/api/v1/transfers` | Lists recorded payout transfers |
+| `GET` | `/api/v1/scheduler/status` | Returns scheduler status (completed cycles, remaining, mode, next run) |
+| `POST` | `/api/v1/scheduler/trigger` | Triggers an immediate on-demand invoice cycle |
+| `PUT` | `/api/v1/scheduler/mode` | Updates scheduler mode (`once` vs `recurring`) |
+| `POST` | `/api/v1/scheduler/reset` | Resets stored cycle execution history in database |
+| `GET` | `/health` | Application health check endpoint |

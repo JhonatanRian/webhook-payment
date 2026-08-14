@@ -14,15 +14,21 @@ ENV/
 *.sqlite
 *.sqlite3
 
-# Environment variables
+# Environment variables and keys
 .env
 !.env.example
+*.pem
 
 # Pytest / Coverage / Linting
 .pytest_cache/
 .ruff_cache/
 .coverage
 htmlcov/
+
+# Local reference and planning notes
+architecture_modularized.md
+plan.md
+*.png
 
 # IDE & OS files
 .DS_Store
