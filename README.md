@@ -107,13 +107,18 @@ The repository includes a production-ready, ultra-lightweight (~70 MB) Alpine Do
 docker compose up -d --build
 ```
 
-### 📊 Real Production Metrics (VPS)
+### 📊 Real Production Telemetry (VPS + Portainer)
 
 ![Production Server Telemetry](docs/assets/server-metrics.png)
 
-- **Memory Footprint:** Only **~3.5 MB of RAM** under active operation.
-- **CPU Usage:** Consistently **< 0.2% CPU** with negligible spikes during webhook handling.
-- **Ultra-lightweight:** Alpine Linux runtime with zero compiler bloat.
+| Metric | Measured Value | Baseline / Capacity | Status |
+| :--- | :---: | :---: | :---: |
+| **RAM (Memory)** | **~3.5 MB** *(Megabytes, not GB)* | ~0.3% of a 1 GB VPS | 🟢 Ultra-lightweight |
+| **CPU Usage** | **< 0.2%** | Idle baseline | 🟢 Negligible load |
+| **Network I/O** | **~420 kB** | Active Stark Bank polling | 🟢 Healthy |
+| **Disk Write** | **~8 kB** | Non-blocking SQLite I/O | 🟢 Minimal |
+
+> ℹ️ **Note on chart scale:** The memory chart Y-axis is automatically scaled by Portainer to a maximum of **3.5 MB** (not gigabytes). The application is idling at ~3.4 MB total RSS memory footprint.
 
 ---
 

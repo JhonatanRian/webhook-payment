@@ -91,12 +91,17 @@ networks:
 
 ---
 
-## 📊 Telemetria & Consumo Real em Produção
+## 📊 Telemetria & Consumo Real em Produção (VPS)
 
-Abaixo estão as métricas reais coletadas do container rodando continuamente na VPS através do Portainer:
+Abaixo estão as métricas coletadas em tempo real do container rodando na VPS através do Portainer:
 
 ![Métricas do Container em Produção](assets/server-metrics.png)
 
-- **Uso de Memória**: Apenas **~3.5 MB de RAM**, demonstrando a eficiência do runtime Alpine + Uvicorn.
-- **Uso de CPU**: Praticamente **0.0% a 0.2%**, com picos desprezíveis durante a emissão de faturas e processamento de webhooks.
-- **I/O e Rede**: Leituras e escritas assíncronas no SQLite sem gargalos de disco.
+| Métrica | Consumo Medido | Comparativo / Escala | Avaliação |
+| :--- | :---: | :---: | :---: |
+| **Memória RAM** | **~3.5 MB** *(Megabytes, não GB)* | Menos de 0.4% de uma VPS modesta de 1 GB | 🟢 Pegada de memória quase nula |
+| **Uso de CPU** | **< 0.2%** | Picos quase imperceptíveis nos webhooks | 🟢 Totalmente livre de travamentos |
+| **Tráfego de Rede** | **~420 kB TX** | Chamadas à API da Stark Bank | 🟢 Estável |
+| **Escrita em Disco** | **~8 kB** | Gravações atômicas no SQLite | 🟢 Sem gargalos de I/O |
+
+> 💡 **Atenção à escala do gráfico:** O eixo Y do Portainer autoajusta a altura máxima para o valor medido no momento (**3.5 Megabytes**, não Gigabytes). A aplicação consome menos de 4 MB de memória no total graças ao runtime enxuto do Alpine + Uvicorn + `uv`.
