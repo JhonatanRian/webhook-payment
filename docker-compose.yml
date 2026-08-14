@@ -11,6 +11,7 @@ services:
       - STARK_PRIVATE_KEY=${STARK_PRIVATE_KEY}
       - SCHEDULER_MODE=${SCHEDULER_MODE:-once}
       - SCHEDULER_INTERVAL_MINUTES=${SCHEDULER_INTERVAL_MINUTES:-180}
+      - CORS_ORIGINS=${CORS_ORIGINS:-*}
     volumes:
       - payment_data:/data
     networks:

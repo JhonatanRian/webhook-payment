@@ -93,3 +93,12 @@ def test_log_format_sanitizer() -> None:
     assert Settings(LOG_FORMAT="JSON").LOG_FORMAT == "json"
     assert Settings(LOG_FORMAT="default").LOG_FORMAT == "default"
     assert Settings.model_validate({"LOG_FORMAT": 123}).LOG_FORMAT == "auto"
+
+
+def test_cors_origins_parsing() -> None:
+    assert Settings(CORS_ORIGINS="*").parsed_cors_origins == ["*"]
+    assert Settings(
+        CORS_ORIGINS="https://app.example.com, http://localhost:5173"
+    ).parsed_cors_origins == ["https://app.example.com", "http://localhost:5173"]
+    assert Settings.model_validate({"CORS_ORIGINS": None}).parsed_cors_origins == ["*"]
+    assert Settings(CORS_ORIGINS="").parsed_cors_origins == ["*"]
