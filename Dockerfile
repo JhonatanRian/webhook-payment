@@ -43,7 +43,7 @@ ENV PATH="/app/.venv/bin:$PATH" \
     PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PORT=8080 \
-    WEB_CONCURRENCY=2
+    WEB_CONCURRENCY=1
 
 # Copy virtual environment from builder stage
 COPY --from=builder /app/.venv /app/.venv
