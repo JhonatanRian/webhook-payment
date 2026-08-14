@@ -14,6 +14,7 @@ To authenticate and operate with Stark Bank (Sandbox or Production), you need an
    Alternatively, you can generate them using the Python SDK:
    ```python
    import starkbank
+
    private_key, public_key = starkbank.key.create()
    print("Private Key:\n", private_key)
    print("Public Key:\n", public_key)
