@@ -6,6 +6,7 @@ from fastapi import FastAPI
 
 from app.core.exceptions.handlers import register_exception_handlers
 from app.core.logging import setup_logging
+from app.core.middleware import RequestLoggingMiddleware
 from app.core.starkbank import setup_starkbank_user
 from app.infra.db.session import init_db
 from app.modules.invoice.router import router as invoice_router
@@ -37,6 +38,9 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# Register request logging middleware
+app.add_middleware(RequestLoggingMiddleware)
 
 # Register global exception handlers
 register_exception_handlers(app)

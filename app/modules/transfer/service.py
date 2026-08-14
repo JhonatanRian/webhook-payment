@@ -1,11 +1,16 @@
+import logging
+
 import starkbank
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.concurrency import run_in_thread
 from app.core.config import settings
 from app.core.exceptions.domain_exceptions import BusinessRuleViolationError
+from app.core.exceptions.starkbank_mapper import handle_starkbank_exception
 from app.modules.transfer.model import TransferRecord
 from app.modules.transfer.repository import TransferRepository
+
+logger = logging.getLogger(__name__)
 
 
 class TransferService:
@@ -23,12 +28,23 @@ class TransferService:
         fee: int,
         stark_invoice_id: str | None = None,
         event_id: str | None = None,
+        autocommit: bool = True,
     ) -> TransferRecord:
         net_amount = gross_amount - fee
         if net_amount <= 0:
             raise BusinessRuleViolationError(
                 f"Net amount ({net_amount} cents) must be positive to perform transfer."
             )
+
+        logger.info(
+            "Executing payout transfer for credited invoice: gross_amount=%d, fee=%d, "
+            "net_amount=%d [stark_invoice_id=%s, event_id=%s]",
+            gross_amount,
+            fee,
+            net_amount,
+            stark_invoice_id,
+            event_id,
+        )
 
         stark_transfer_obj = starkbank.Transfer(
             amount=net_amount,
@@ -64,10 +80,26 @@ class TransferService:
             else:
                 record.status = "success"
         except Exception as err:
+            logger.error(
+                "Transfer execution failed [transfer_record_id=%s, stark_invoice_id=%s]: %s",
+                record.id,
+                stark_invoice_id,
+                err,
+            )
             record.status = "failed"
-            await self.session.commit()
-            raise err
+            if autocommit:
+                await self.session.commit()
+            raise handle_starkbank_exception(err) from err
 
-        await self.session.commit()
-        await self.session.refresh(record)
+        if autocommit:
+            await self.session.commit()
+            await self.session.refresh(record)
+
+        logger.info(
+            "Transfer completed successfully [transfer_record_id=%s, "
+            "stark_transfer_id=%s, net_amount=%d]",
+            record.id,
+            record.stark_transfer_id,
+            net_amount,
+        )
         return record

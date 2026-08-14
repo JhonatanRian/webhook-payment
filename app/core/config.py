@@ -1,6 +1,7 @@
 import logging
 from functools import lru_cache
 from pathlib import Path
+from typing import Any, Literal
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -32,22 +33,56 @@ class Settings(BaseSettings):
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "auto"
 
+    SCHEDULER_MODE: Literal["once", "recurring"] = "once"
+    SCHEDULER_MAX_CYCLES: int = 8
+    SCHEDULER_INTERVAL_MINUTES: int = 180
+    SCHEDULER_JOBSTORE_URL: str = DATABASE_URL
+
+    @field_validator("SCHEDULER_MODE", mode="before")
+    @classmethod
+    def sanitize_scheduler_mode(cls, v: Any) -> str:
+        if isinstance(v, str):
+            v_lower = v.lower().strip()
+            if v_lower in ("once", "recurring"):
+                return v_lower
+        return "once"
+
+    @field_validator("SCHEDULER_MAX_CYCLES", mode="before")
+    @classmethod
+    def sanitize_scheduler_max_cycles(cls, v: Any) -> int:
+        try:
+            val = int(v)
+            return val if val >= 1 else 8
+        except (ValueError, TypeError):
+            return 8
+
+    @field_validator("SCHEDULER_INTERVAL_MINUTES", mode="before")
+    @classmethod
+    def sanitize_scheduler_interval_minutes(cls, v: Any) -> int:
+        try:
+            val = int(v)
+            return val if val >= 1 else 180
+        except (ValueError, TypeError):
+            return 180
+
+    @property
+    def max_cycles(self) -> int:
+        return max(1, self.SCHEDULER_MAX_CYCLES)
+
     @property
     def resolved_private_key(self) -> str:
         if self.STARK_PRIVATE_KEY_PATH:
             key_path = Path(self.STARK_PRIVATE_KEY_PATH).expanduser().resolve()
             if key_path.is_file():
-                logger.info("Carregando chave privada a partir de: %s", key_path)
+                logger.info("Loading private key from: %s", key_path)
                 return key_path.read_text(encoding="utf-8").strip()
-            logger.error("Chave não encontrada em STARK_PRIVATE_KEY_PATH: %s", key_path)
-            raise FileNotFoundError(
-                f"Arquivo de chave privada do Stark Bank não encontrado em: {key_path}"
-            )
+            logger.error("Key not found at STARK_PRIVATE_KEY_PATH: %s", key_path)
+            raise FileNotFoundError(f"Stark Bank private key file not found at: {key_path}")
 
         if self.STARK_PRIVATE_KEY:
             potential_path = Path(self.STARK_PRIVATE_KEY.strip()).expanduser()
             if potential_path.is_file():
-                logger.info("Carregando chave privada a partir de: %s", potential_path)
+                logger.info("Loading private key from: %s", potential_path)
                 return potential_path.read_text(encoding="utf-8").strip()
 
             return self.STARK_PRIVATE_KEY.replace("\\n", "\n").strip()

@@ -18,7 +18,7 @@ def setup_starkbank_user(custom_settings: Settings | None = None) -> starkbank.P
             private_key=private_key,
         )
         starkbank.user = project
-        logger.info("Stark Bank Project configurado com sucesso.")
+        logger.info("Stark Bank Project successfully configured.")
         return project
-    logger.warning("STARK_PROJECT_ID ou chave privada não configurados. SDK do Stark Bank inativo.")
+    logger.warning("STARK_PROJECT_ID or private key not configured. Stark Bank SDK is inactive.")
     return None

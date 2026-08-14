@@ -10,7 +10,12 @@ from app.modules.transfer.service import TransferService
 router = APIRouter(prefix="/api/v1/transfers", tags=["Transfers"])
 
 
-@router.get("", response_model=list[TransferResponse])
+@router.get(
+    "",
+    response_model=list[TransferResponse],
+    summary="List transfer records",
+    description="Returns all recorded payout transfers executed by the application.",
+)
 async def list_transfers(
     db: AsyncSession = Depends(get_db),
 ) -> Sequence[TransferResponse]:

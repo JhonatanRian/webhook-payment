@@ -10,18 +10,30 @@ from app.modules.invoice.service import InvoiceService
 router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
 
 
-@router.post("/batch", response_model=InvoiceBatchResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/batch",
+    response_model=InvoiceBatchResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Trigger invoice batch issuance",
+    description="Manually triggers issuance of a batch of 8 to 12 randomized invoices.",
+)
 async def trigger_invoice_batch(
-    cycle_index: int = Query(default=1, ge=1, description="Cycle index (1-8)"),
-    count: int | None = Query(default=None, ge=1, le=50, description="Optional invoice count"),
+    count: int | None = Query(
+        default=None, ge=1, le=50, description="Optional invoice count (defaults to random 8-12)"
+    ),
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceBatchResponse:
     service = InvoiceService(session=db)
-    batch = await service.issue_batch(cycle_index=cycle_index, count=count)
+    batch = await service.issue_batch(count=count, trigger_type="manual")
     return InvoiceBatchResponse.model_validate(batch)
 
 
-@router.get("/batches", response_model=list[InvoiceBatchResponse])
+@router.get(
+    "/batches",
+    response_model=list[InvoiceBatchResponse],
+    summary="List invoice batches",
+    description="Returns all issued invoice batches with their associated invoice items.",
+)
 async def list_invoice_batches(
     db: AsyncSession = Depends(get_db),
 ) -> Sequence[InvoiceBatchResponse]:

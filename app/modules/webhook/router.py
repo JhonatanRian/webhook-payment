@@ -13,6 +13,9 @@ router = APIRouter(prefix="/api/v1/webhooks", tags=["Webhooks"])
     response_model=WebhookResponse,
     status_code=status.HTTP_200_OK,
     summary="Stark Bank Webhook Endpoint",
+    description=(
+        "Receives and processes incoming Stark Bank webhook events with ECDSA signature validation."
+    ),
 )
 async def handle_starkbank_webhook(
     request: Request,
