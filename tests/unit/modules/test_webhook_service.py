@@ -82,6 +82,24 @@ async def test_webhook_credited_invoice_flow(db_session: AsyncSession) -> None:
     assert updated_inv.status == "credited"
 
 
+async def test_webhook_credited_unknown_invoice_skips_transfer(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+    mock_invoice = MagicMock(id="unknown_inv_999", amount=7500, fee=150)
+    mock_log = MagicMock(type="credited", invoice=mock_invoice)
+    mock_event = MagicMock(id="evt_unknown", subscription="invoice", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        with patch(
+            "app.modules.transfer.service.TransferService.transfer_credited_invoice"
+        ) as mock_transfer:
+            res = await service.process_webhook(body_bytes=b"{}", signature="sig_ok")
+
+            assert res["status"] == "success"
+            assert res["event_id"] == "evt_unknown"
+            assert res["transfer_id"] is None
+            assert not mock_transfer.called
+
+
 async def test_webhook_non_credited_event(db_session: AsyncSession) -> None:
     service = WebhookService(session=db_session)
 
@@ -120,3 +138,18 @@ async def test_webhook_integrity_error_rollback(db_session: AsyncSession) -> Non
         ):
             with pytest.raises(DuplicateEventError):
                 await service.process_webhook(body_bytes=b"{}", signature="sig_integ")
+
+
+async def test_webhook_unhandled_exception_rollback(db_session: AsyncSession) -> None:
+    service = WebhookService(session=db_session)
+
+    mock_event = MagicMock(id="evt_err", subscription="invoice", log=MagicMock(type="other"))
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        with patch.object(
+            service,
+            "_persist_and_dispatch",
+            side_effect=RuntimeError("Unexpected error during processing"),
+        ):
+            with pytest.raises(RuntimeError):
+                await service.process_webhook(body_bytes=b"{}", signature="sig_err")

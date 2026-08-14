@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -9,7 +9,7 @@ from app.core.config import settings
 from app.infra.db.session import AsyncSessionLocal
 from app.modules.invoice.service import InvoiceService
 from app.modules.scheduler.model import ScheduleCycleRecord
-from app.modules.scheduler.repository import ScheduleCycleRepository
+from app.modules.scheduler.repository import ScheduleCycleRepository, SchedulerStateRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +24,33 @@ def get_current_mode() -> SchedulerMode:
     return current_mode
 
 
-def set_current_mode(mode: str) -> SchedulerMode:
+async def set_current_mode(mode: str, db_session: AsyncSession | None = None) -> SchedulerMode:
     global current_mode
-    valid_mode = mode.lower().strip()
-    if valid_mode == "recurring":
-        current_mode = "recurring"
+    valid_mode: SchedulerMode = "recurring" if mode.lower().strip() == "recurring" else "once"
+    current_mode = valid_mode
+
+    if db_session is not None:
+        state_repo = SchedulerStateRepository(session=db_session)
+        await state_repo.set_mode(valid_mode)
     else:
-        current_mode = "once"
+        async with AsyncSessionLocal() as session:
+            state_repo = SchedulerStateRepository(session=session)
+            await state_repo.set_mode(valid_mode)
+
     return current_mode
+
+
+async def init_scheduler_state() -> SchedulerMode:
+    global current_mode
+    async with AsyncSessionLocal() as session:
+        state_repo = SchedulerStateRepository(session=session)
+        state = await state_repo.get_or_create_state(default_mode=settings.SCHEDULER_MODE)
+        valid_mode: SchedulerMode = (
+            "recurring" if state.mode.lower().strip() == "recurring" else "once"
+        )
+        current_mode = valid_mode
+        logger.info("Scheduler state initialized from database with mode: '%s'", current_mode)
+        return current_mode
 
 
 def get_next_run_time() -> datetime | None:
@@ -42,9 +61,38 @@ def get_next_run_time() -> datetime | None:
     return None
 
 
+async def get_next_run_delay_seconds() -> int:
+    interval_seconds = settings.SCHEDULER_INTERVAL_MINUTES * 60
+    async with AsyncSessionLocal() as session:
+        cycle_repo = ScheduleCycleRepository(session=session)
+        last_cycle = await cycle_repo.get_last_scheduled_cycle()
+        if last_cycle and last_cycle.executed_at:
+            last_run = last_cycle.executed_at
+            if last_run.tzinfo is None:
+                last_run = last_run.replace(tzinfo=UTC)
+            elapsed = (datetime.now(UTC) - last_run).total_seconds()
+            if elapsed < interval_seconds:
+                remaining = max(1, int(interval_seconds - elapsed))
+                logger.info(
+                    "Recent scheduled cycle (%ds ago). Next cycle scheduled in %ds.",
+                    int(elapsed),
+                    remaining,
+                )
+                return remaining
+            logger.info(
+                "Elapsed time since last cycle (%ds) exceeds interval (%ds). Triggering catch-up.",
+                int(elapsed),
+                interval_seconds,
+            )
+            return 1
+
+    return interval_seconds
+
+
 async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode: str) -> None:
     max_cycles = settings.max_cycles
     cycle_repo = ScheduleCycleRepository(session=session)
+    state_repo = SchedulerStateRepository(session=session)
 
     if trigger_type == "manual":
         total_manual = await cycle_repo.get_manual_trigger_count()
@@ -89,6 +137,10 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
             batch_id=batch.id,
         )
         await cycle_repo.create(cycle_rec, autocommit=True)
+
+        if trigger_type == "scheduled":
+            await state_repo.update_last_scheduled_run(datetime.now(UTC))
+
         logger.info(
             "Cycle %d (%s) completed with %d invoices.",
             cycle_index,
@@ -118,8 +170,12 @@ async def execute_cycle_job(
             await _run_cycle_with_session(session, trigger_type, mode)
 
 
-def start_scheduler(run_on_startup: bool = True) -> None:
+async def start_scheduler(run_on_startup: bool = True) -> None:
     try:
+        await init_scheduler_state()
+        delay_seconds = await get_next_run_delay_seconds()
+        start_time = datetime.now(UTC) + timedelta(seconds=delay_seconds)
+
         if not scheduler.running:
             job = scheduler.get_job("invoice_batch_cycle_job")
             if job:
@@ -127,12 +183,14 @@ def start_scheduler(run_on_startup: bool = True) -> None:
                     "invoice_batch_cycle_job",
                     trigger="interval",
                     minutes=settings.SCHEDULER_INTERVAL_MINUTES,
+                    start_date=start_time,
                 )
             else:
                 scheduler.add_job(
                     execute_cycle_job,
                     trigger="interval",
                     minutes=settings.SCHEDULER_INTERVAL_MINUTES,
+                    start_date=start_time,
                     id="invoice_batch_cycle_job",
                     replace_existing=True,
                     coalesce=True,
@@ -140,7 +198,8 @@ def start_scheduler(run_on_startup: bool = True) -> None:
                 )
             scheduler.start()
             logger.info(
-                "APScheduler started (interval: %d min, coalesce=True, misfire_grace_time=3600).",
+                "APScheduler started (first run in %ds, interval: %d min, coalesce=True).",
+                delay_seconds,
                 settings.SCHEDULER_INTERVAL_MINUTES,
             )
     except Exception as err:

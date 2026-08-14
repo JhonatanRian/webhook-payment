@@ -12,6 +12,10 @@ async def test_webhook_endpoint_missing_signature(async_client: AsyncClient) -> 
 
 
 async def test_webhook_endpoint_credited_event(async_client: AsyncClient) -> None:
+    mock_stark_invoices = [MagicMock(id="inv_test_1", amount=15000, status="created")]
+    with patch("starkbank.invoice.create", return_value=mock_stark_invoices):
+        await async_client.post("/api/v1/invoices/batch?count=1")
+
     mock_invoice = MagicMock(id="inv_test_1", amount=15000, fee=200)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_test_1", subscription="invoice", log=mock_log)
@@ -33,6 +37,10 @@ async def test_webhook_endpoint_credited_event(async_client: AsyncClient) -> Non
 
 
 async def test_webhook_endpoint_duplicate_event_returns_200(async_client: AsyncClient) -> None:
+    mock_stark_invoices = [MagicMock(id="inv_dup_1", amount=5000, status="created")]
+    with patch("starkbank.invoice.create", return_value=mock_stark_invoices):
+        await async_client.post("/api/v1/invoices/batch?count=1")
+
     mock_invoice = MagicMock(id="inv_dup_1", amount=5000, fee=0)
     mock_log = MagicMock(type="credited", invoice=mock_invoice)
     mock_event = MagicMock(id="evt_dup_1", subscription="invoice", log=mock_log)

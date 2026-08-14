@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     setup_starkbank_user()
     await init_db()
-    start_scheduler()
+    await start_scheduler()
     yield
     stop_scheduler()
 

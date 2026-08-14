@@ -48,11 +48,19 @@ class WebhookService:
         amount = getattr(item_obj, "amount", 0)
         fee = getattr(item_obj, "fee", 0) or 0
 
+        inv_record = None
         if stark_item_id:
             inv_record = await self.invoice_repo.get_by_stark_id(stark_item_id)
-            if inv_record:
-                inv_record.status = "credited"
-                self.session.add(inv_record)
+
+        if not inv_record:
+            logger.warning(
+                "Received credited webhook for unknown invoice '%s'. Skipping payout transfer.",
+                stark_item_id,
+            )
+            return None
+
+        inv_record.status = "credited"
+        self.session.add(inv_record)
 
         transfer_rec = await self.transfer_service.transfer_credited_invoice(
             gross_amount=amount,

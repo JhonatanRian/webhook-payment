@@ -78,8 +78,9 @@ async def trigger_manual_cycle(
 )
 async def update_scheduler_mode(
     payload: SchedulerModeUpdateRequest,
+    db: AsyncSession = Depends(get_db),
 ) -> SchedulerControlResponse:
-    new_mode = set_current_mode(payload.mode)
+    new_mode = await set_current_mode(payload.mode, db_session=db)
     return SchedulerControlResponse(
         message=f"Scheduler mode successfully updated to '{new_mode}'.",
         mode=new_mode,
