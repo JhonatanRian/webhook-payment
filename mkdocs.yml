@@ -1,0 +1,63 @@
+site_name: Stark Bank Webhook & Payment Integration
+site_description: Automated invoice issuance, webhook listener, and payout transfer system with Stark Bank Sandbox.
+site_author: Jhonatan Rian
+site_url: https://jhonatanrian.github.io/webhook-payment/
+repo_url: https://github.com/JhonatanRian/webhook-payment
+repo_name: JhonatanRian/webhook-payment
+
+theme:
+  name: material
+  language: pt-BR
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.instant
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  palette:
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Mudar para tema claro
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Mudar para tema escuro
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - attr_list
+  - md_in_html
+
+nav:
+  - Início: index.md
+  - Arquitetura & Design: architecture.md
+  - Regras de Negócio & Ciclos: business-rules.md
+  - Catálogo de Endpoints: api-reference.md
+  - Deploy & Infraestrutura: deployment.md
+  - Estratégia de Testes: testing.md
+  - Ferramental & Configurações: tooling.md
