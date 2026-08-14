@@ -30,6 +30,8 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str = "sqlite+aiosqlite:///./webhook_payment.db"
 
+    CORS_ORIGINS: str = "*"
+
     LOG_LEVEL: str = "INFO"
     LOG_FORMAT: str = "auto"
 
@@ -77,6 +79,11 @@ class Settings(BaseSettings):
         return max(1, self.SCHEDULER_MAX_CYCLES)
 
     @property
+    def parsed_cors_origins(self) -> list[str]:
+        origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        return origins if origins else ["*"]
+
+    @property
     def resolved_private_key(self) -> str:
         if self.STARK_PRIVATE_KEY_PATH:
             key_path = Path(self.STARK_PRIVATE_KEY_PATH).expanduser().resolve()
@@ -120,6 +127,13 @@ class Settings(BaseSettings):
         if isinstance(v, str):
             return v.replace(".", "").replace("/", "").replace("-", "").strip()
         return v
+
+    @field_validator("CORS_ORIGINS", mode="before")
+    @classmethod
+    def sanitize_cors_origins(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        return "*"
 
 
 @lru_cache

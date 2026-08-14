@@ -3,7 +3,9 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 
+from app.core.config import settings
 from app.core.exceptions.handlers import register_exception_handlers
 from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
@@ -36,6 +38,13 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.parsed_cors_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.add_middleware(RequestLoggingMiddleware)
 register_exception_handlers(app)
 
