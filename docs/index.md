@@ -51,5 +51,5 @@ Explore os tópicos detalhados no menu superior:
 2. **[Regras de Negócio & Ciclos](business-rules.md)** — Funcionamento dos ciclos de 24h, modos `once` vs `recurring`, liquidação Pix e verificação ECDSA.
 3. **[Catálogo de Endpoints](api-reference.md)** — Documentação de rotas, contratos de entrada/saída e códigos HTTP.
 4. **[Deploy & Infraestrutura](deployment.md)** — Pipeline de CI/CD no GitHub Actions, GHCR, Portainer e proxy Traefik com SSL automático.
-5. **[Estratégia de Testes](testing.md)** — Estrutura de 91 testes, testes adversariais de concorrência, idempotência e cobertura de 100%.
+5. **[Estratégia de Testes](testing.md)** — Estrutura de 99 testes, testes adversariais de concorrência, idempotência e cobertura de 100%.
 6. **[Ferramental & Configurações](tooling.md)** — Guia do `pyproject.toml`, Astral `uv`, formatação Ruff e Git pre-push hooks.

@@ -34,19 +34,64 @@ Gera e emite imediatamente um lote de faturas Pix no Sandbox da Stark Bank.
 ---
 
 ### `GET /api/v1/invoices/batches`
-Retorna a lista de todos os lotes de faturas emitidos e seus itens associados.
+Retorna uma lista paginada de todos os lotes de faturas emitidos e seus itens associados.
 
+- **Query Parameters:**
+  - `page` *(opcional, int, padrão: 1)*: Número da página (1-indexed).
+  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de itens por página.
 - **Resposta Sucesso (`200 OK`):**
 ```json
-[
-  {
-    "id": "e8d47b6a12c3498bb892471629abc123",
-    "total_amount": 145020,
-    "invoice_count": 10,
-    "created_at": "2026-08-14T03:00:00.123456Z",
-    "items": [...]
-  }
-]
+{
+  "items": [
+    {
+      "id": "e8d47b6a12c3498bb892471629abc123",
+      "cycle_index": 1,
+      "invoice_count": 10,
+      "status": "completed",
+      "created": "2026-08-14T03:00:00.123456Z",
+      "invoices": [...]
+    }
+  ],
+  "total": 8,
+  "page": 1,
+  "size": 20,
+  "pages": 1,
+  "has_next": false,
+  "has_previous": false
+}
+```
+
+---
+
+### `GET /api/v1/invoices`
+Retorna uma lista paginada de todas as faturas individuais com suporte a filtro opcional por status.
+
+- **Query Parameters:**
+  - `status` *(opcional, str)*: Filtrar por status (ex: `created`, `credited`).
+  - `page` *(opcional, int, padrão: 1)*: Número da página.
+  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de faturas por página.
+- **Resposta Sucesso (`200 OK`):**
+```json
+{
+  "items": [
+    {
+      "id": "1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d",
+      "stark_invoice_id": "5839201948572019",
+      "batch_id": "e8d47b6a12c3498bb892471629abc123",
+      "amount": 15000,
+      "tax_id": "12345678909",
+      "name": "Maria Silva",
+      "status": "credited",
+      "created": "2026-08-14T03:00:00.123456Z"
+    }
+  ],
+  "total": 80,
+  "page": 1,
+  "size": 20,
+  "pages": 4,
+  "has_next": true,
+  "has_previous": false
+}
 ```
 
 ---
@@ -82,21 +127,34 @@ Endpoint receptor dos eventos da Stark Bank. Valida a assinatura ECDSA e despach
 ## 💸 Módulo: Transfers (Transferências)
 
 ### `GET /api/v1/transfers`
-Retorna a lista de todas as transferências de liquidação realizadas pelo sistema após recebimento de webhooks.
+Retorna uma lista paginada de todas as transferências de liquidação realizadas pelo sistema após recebimento de webhooks.
 
+- **Query Parameters:**
+  - `page` *(opcional, int, padrão: 1)*: Número da página (1-indexed).
+  - `size` *(opcional, int, padrão: 20, máx: 100)*: Quantidade de transferências por página.
 - **Resposta Sucesso (`200 OK`):**
 ```json
-[
-  {
-    "id": "9f8e7d6c5b4a39281726354433221100",
-    "stark_transfer_id": "4728193847291048",
-    "invoice_id": "5839201948572019",
-    "amount": 14950,
-    "fee": 50,
-    "status": "success",
-    "created_at": "2026-08-14T03:15:22.000000Z"
-  }
-]
+{
+  "items": [
+    {
+      "id": "9f8e7d6c5b4a39281726354433221100",
+      "stark_transfer_id": "4728193847291048",
+      "stark_invoice_id": "5839201948572019",
+      "event_id": "5738291048592018",
+      "amount": 15000,
+      "fee": 50,
+      "net_amount": 14950,
+      "status": "success",
+      "created": "2026-08-14T03:15:22.000000Z"
+    }
+  ],
+  "total": 12,
+  "page": 1,
+  "size": 20,
+  "pages": 1,
+  "has_next": false,
+  "has_previous": false
+}
 ```
 
 ---

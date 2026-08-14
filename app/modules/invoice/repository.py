@@ -1,10 +1,11 @@
 from collections.abc import Sequence
 
-from sqlalchemy import select
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.modules.invoice.model import InvoiceBatch, InvoiceRecord
+from app.shared.pagination import PaginatedResult, PaginationParams
 from app.shared.repository import BaseRepository
 
 
@@ -22,9 +23,24 @@ class InvoiceBatchRepository(BaseRepository[InvoiceBatch]):
         return result.scalars().first()
 
     async def get_all(self) -> Sequence[InvoiceBatch]:
-        query = select(InvoiceBatch).options(selectinload(InvoiceBatch.invoices))
+        query = (
+            select(InvoiceBatch)
+            .options(selectinload(InvoiceBatch.invoices))
+            .order_by(desc(InvoiceBatch.created))
+        )
         result = await self.session.execute(query)
         return result.scalars().all()
+
+    async def paginate_batches(
+        self,
+        params: PaginationParams,
+    ) -> PaginatedResult[InvoiceBatch]:
+        query = (
+            select(InvoiceBatch)
+            .options(selectinload(InvoiceBatch.invoices))
+            .order_by(desc(InvoiceBatch.created))
+        )
+        return await self.paginate(params=params, query=query)
 
 
 class InvoiceRecordRepository(BaseRepository[InvoiceRecord]):
@@ -35,3 +51,13 @@ class InvoiceRecordRepository(BaseRepository[InvoiceRecord]):
         query = select(InvoiceRecord).where(InvoiceRecord.stark_invoice_id == stark_invoice_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def paginate_invoices(
+        self,
+        params: PaginationParams,
+        status: str | None = None,
+    ) -> PaginatedResult[InvoiceRecord]:
+        query = select(InvoiceRecord).order_by(desc(InvoiceRecord.created))
+        if status:
+            query = query.where(InvoiceRecord.status == status)
+        return await self.paginate(params=params, query=query)
