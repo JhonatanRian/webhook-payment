@@ -69,3 +69,11 @@ def test_scheduler_explicit_max_cycles_property() -> None:
     assert Settings(SCHEDULER_MAX_CYCLES=8).max_cycles == 8
     assert Settings(SCHEDULER_MAX_CYCLES=12).max_cycles == 12
     assert Settings(SCHEDULER_MAX_CYCLES=24).max_cycles == 24
+
+
+def test_scheduler_jobstore_url_sanitizer() -> None:
+    s1 = Settings(SCHEDULER_JOBSTORE_URL="sqlite+aiosqlite:///./test.db")
+    assert s1.SCHEDULER_JOBSTORE_URL == "sqlite:///./test.db"
+
+    s2 = Settings(SCHEDULER_JOBSTORE_URL="sqlite:///./test.db")
+    assert s2.SCHEDULER_JOBSTORE_URL == "sqlite:///./test.db"

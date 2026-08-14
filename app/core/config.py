@@ -36,7 +36,14 @@ class Settings(BaseSettings):
     SCHEDULER_MODE: Literal["once", "recurring"] = "once"
     SCHEDULER_MAX_CYCLES: int = 8
     SCHEDULER_INTERVAL_MINUTES: int = 180
-    SCHEDULER_JOBSTORE_URL: str = DATABASE_URL
+    SCHEDULER_JOBSTORE_URL: str = "sqlite:///./webhook_payment.db"
+
+    @field_validator("SCHEDULER_JOBSTORE_URL", mode="before")
+    @classmethod
+    def sanitize_jobstore_url(cls, v: Any) -> str:
+        if isinstance(v, str):
+            return v.replace("+aiosqlite", "")
+        return "sqlite:///./webhook_payment.db"
 
     @field_validator("SCHEDULER_MODE", mode="before")
     @classmethod
