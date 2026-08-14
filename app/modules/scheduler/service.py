@@ -42,9 +42,7 @@ def get_next_run_time() -> datetime | None:
     return None
 
 
-async def _run_cycle_with_session(
-    session: AsyncSession, trigger_type: str, mode: str
-) -> None:
+async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode: str) -> None:
     max_cycles = settings.max_cycles
     cycle_repo = ScheduleCycleRepository(session=session)
 
@@ -74,9 +72,7 @@ async def _run_cycle_with_session(
                     max_cycles,
                 )
                 return
-            total_scheduled = await cycle_repo.get_completed_cycle_count(
-                trigger_type="scheduled"
-            )
+            total_scheduled = await cycle_repo.get_completed_cycle_count(trigger_type="scheduled")
             cycle_index = total_scheduled + 1
 
         logger.info("Starting SCHEDULED cycle %d/%d (%s)...", cycle_index, max_cycles, mode)

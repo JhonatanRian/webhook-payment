@@ -1,0 +1,10 @@
+#!/bin/sh
+set -e
+
+echo "🔍 [git-hook] Running Ruff format check and linter via uv..."
+
+uv run ruff format --check .
+uv run ruff check .
+uv run pytest --maxfail=1 -q
+
+echo "✅ [git-hook] Code quality and test checks passed!"
