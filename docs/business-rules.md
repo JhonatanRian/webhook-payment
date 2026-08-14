@@ -13,11 +13,11 @@ flowchart TD
     START["⏰ Timer APScheduler Dispara (a cada 3h)"] --> CHECK_MODE{"Qual o Modo Ativo?"}
     
     CHECK_MODE -->|"Modo 'once'"| CHECK_ONCE{"Já concluiu 8 ciclos?"}
-    CHECK_ONCE -->|"Sim"| STOP["🛑 Limite de 8 ciclos atingido. Aguarda em repouso."]
+    CHECK_ONCE -->|"Sim"| STOP["🛑 Limite de 8 ciclos atingido. Encerra e aguarda em repouso."]
     CHECK_ONCE -->|"Não"| GENERATE["🎲 Gera Lote de 8 a 12 Faturas Pix"]
     
     CHECK_MODE -->|"Modo 'recurring'"| CHECK_REC{"Já rodou 8 ciclos nas últimas 24h?"}
-    CHECK_REC -->|"Sim"| SKIP["⏳ Cota diária atingida. Aguarda a janela móvel abrir vaga."]
+    CHECK_REC -->|"Sim"| SKIP["⏳ Cota de 8 ciclos nas últimas 24h atingida. Executará no próximo intervalo de 3h."]
     CHECK_REC -->|"Não"| GENERATE
 
     GENERATE --> SEND_STARK["🏦 Envia faturas para a Stark Bank API"]
@@ -35,9 +35,9 @@ O enunciado do desafio pedia para emitir faturas a cada 3 horas durante 24 horas
 - **Como funciona**: O sistema executa rigorosamente **8 ciclos** (8 × 3h = 24 horas) e, ao bater a meta, **encerra as emissões automáticas**.
 - **Por que criamos**: Evita que a aplicação continue emitindo faturas indefinidamente no Sandbox após o término do teste.
 
-### 2. Modo `recurring` (Produção Contínua)
-- **Como funciona**: Roda continuamente 24/7, utilizando uma **janela deslizante de 24 horas** para garantir que nunca sejam disparados mais de 8 lotes dentro de qualquer intervalo de 24 horas.
-- **Por que criamos**: Adequado para cenários onde a aplicação fica ligada direto em produção sem intervenção manual.
+### 2. Modo `recurring` (Produção Contínua 24/7)
+- **Como funciona**: A aplicação roda continuamente sem parar. Ela emite um lote a cada 3 horas (8 lotes por dia) de forma contínua, usando uma **janela deslizante de 24 horas** para garantir que nunca sejam emitidos mais de 8 lotes em um período de 24h. Conforme o tempo avança e os ciclos anteriores completam 24h de emissão, os novos ciclos subsequentes (ciclos 9, 10, 11...) vão sendo disparados naturalmente.
+- **Por que criamos**: Feito para ambientes reais onde o serviço fica rodando ininterruptamente na VPS emitindo cobranças diárias.
 
 > **Dica**: Você pode alternar o modo em tempo de execução via `PUT /api/v1/scheduler/mode` ou disparar um ciclo imediatamente com `POST /api/v1/scheduler/trigger`.
 
