@@ -25,11 +25,6 @@ ENV/
 .coverage
 htmlcov/
 
-# Local reference and planning notes
-architecture_modularized.md
-plan.md
-*.png
-
 # IDE & OS files
 .DS_Store
 .idea/
