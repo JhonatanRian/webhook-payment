@@ -5,7 +5,7 @@ from uuid import UUID as UUIDType
 from sqlalchemy import DateTime, Uuid
 from sqlalchemy.orm import Mapped, mapped_column
 
-from app.infra.db.session import Base
+from app.infra.db.base import Base
 
 
 class BaseModel(Base):

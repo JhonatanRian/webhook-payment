@@ -6,6 +6,10 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.infra.db.session import Base, get_db
 from app.main import app
+from app.modules.invoice.model import InvoiceBatch, InvoiceRecord  # noqa: F401
+from app.modules.scheduler.model import ScheduleCycleRecord, SchedulerStateRecord  # noqa: F401
+from app.modules.transfer.model import TransferRecord  # noqa: F401
+from app.modules.webhook.model import WebhookEventRecord  # noqa: F401
 
 
 @pytest.fixture

@@ -29,28 +29,36 @@ async def set_current_mode(mode: str, db_session: AsyncSession | None = None) ->
     valid_mode: SchedulerMode = "recurring" if mode.lower().strip() == "recurring" else "once"
     current_mode = valid_mode
 
-    if db_session is not None:
-        state_repo = SchedulerStateRepository(session=db_session)
-        await state_repo.set_mode(valid_mode)
-    else:
-        async with AsyncSessionLocal() as session:
-            state_repo = SchedulerStateRepository(session=session)
+    try:
+        if db_session is not None:
+            state_repo = SchedulerStateRepository(session=db_session)
             await state_repo.set_mode(valid_mode)
+        else:
+            async with AsyncSessionLocal() as session:
+                state_repo = SchedulerStateRepository(session=session)
+                await state_repo.set_mode(valid_mode)
+    except Exception as err:
+        logger.warning("Could not persist scheduler mode to database: %s", err)
 
     return current_mode
 
 
 async def init_scheduler_state() -> SchedulerMode:
     global current_mode
-    async with AsyncSessionLocal() as session:
-        state_repo = SchedulerStateRepository(session=session)
-        state = await state_repo.get_or_create_state(default_mode=settings.SCHEDULER_MODE)
-        valid_mode: SchedulerMode = (
-            "recurring" if state.mode.lower().strip() == "recurring" else "once"
-        )
-        current_mode = valid_mode
-        logger.info("Scheduler state initialized from database with mode: '%s'", current_mode)
-        return current_mode
+    try:
+        async with AsyncSessionLocal() as session:
+            state_repo = SchedulerStateRepository(session=session)
+            state = await state_repo.get_or_create_state(default_mode=settings.SCHEDULER_MODE)
+            valid_mode: SchedulerMode = (
+                "recurring" if state.mode.lower().strip() == "recurring" else "once"
+            )
+            current_mode = valid_mode
+            logger.info("Scheduler state initialized from database with mode: '%s'", current_mode)
+    except Exception as err:
+        logger.warning("Could not initialize scheduler state from database: %s", err)
+        current_mode = "recurring" if settings.SCHEDULER_MODE == "recurring" else "once"
+
+    return current_mode
 
 
 def get_next_run_time() -> datetime | None:

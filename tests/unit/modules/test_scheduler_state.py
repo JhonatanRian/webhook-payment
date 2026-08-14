@@ -41,6 +41,19 @@ async def test_init_scheduler_state_and_set_mode_without_session(db_session: Asy
 
 
 @pytest.mark.asyncio
+async def test_scheduler_state_db_exception_fallbacks() -> None:
+    with patch(
+        "app.modules.scheduler.service.AsyncSessionLocal",
+        side_effect=RuntimeError("DB Connection Lost"),
+    ):
+        mode = await init_scheduler_state()
+        assert mode in ("once", "recurring")
+
+        set_mode_res = await set_current_mode("recurring")
+        assert set_mode_res == "recurring"
+
+
+@pytest.mark.asyncio
 async def test_get_next_run_delay_seconds_calculations(db_session: AsyncSession) -> None:
     cycle_repo = ScheduleCycleRepository(session=db_session)
 

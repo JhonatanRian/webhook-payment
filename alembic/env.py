@@ -6,9 +6,9 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from alembic import context
 from app.core.config import settings
-from app.infra.db.session import Base
+from app.infra.db.base import Base
 from app.modules.invoice.model import InvoiceBatch, InvoiceRecord  # noqa: F401
-from app.modules.scheduler.model import ScheduleCycleRecord  # noqa: F401
+from app.modules.scheduler.model import ScheduleCycleRecord, SchedulerStateRecord  # noqa: F401
 from app.modules.transfer.model import TransferRecord  # noqa: F401
 from app.modules.webhook.model import WebhookEventRecord  # noqa: F401
 
