@@ -45,8 +45,25 @@ jobs:
           uv run ruff check .
           uv run ruff format --check .
 
-      - name: Run Pytest Suite with Coverage
-        run: uv run pytest -v --cov=app --cov-report=term-missing
+      - name: Run Pytest Suite with Coverage and JUnit Report
+        run: |
+          uv run pytest -v --cov=app --cov-report=xml:coverage.xml --cov-report=term-missing --junitxml=junit.xml
+
+      - name: Upload coverage reports to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: ./coverage.xml
+          fail_ci_if_error: false
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/test-results-action@v1
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          file: ./junit.xml
+          fail_ci_if_error: false
 
   # ============================================================================
   # Job 2: Build & Push Docker Image + Continuous Deployment to Cloud Run
