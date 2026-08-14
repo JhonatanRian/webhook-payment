@@ -33,35 +33,54 @@ To authenticate and operate with Stark Bank (Sandbox or Production), you need an
 
 ---
 
-## 🐳 Running with Docker (Recommended)
+## 🐳 Deployment with Docker & Portainer (VPS + Traefik)
 
-The project includes an ultra-lightweight, production-grade **Alpine Linux** container image built with **Astral `uv`**, **Nginx Unix Domain Socket Reverse Proxy**, and **Pure Uvicorn** multi-workers.
+The project includes an ultra-lightweight, production-grade **Alpine Linux** container image (`ghcr.io/jhonatanrian/webhook-payment:latest`) built with **Astral `uv`**, **Nginx Unix Domain Socket Reverse Proxy**, and **Pure Uvicorn**.
 
-### 1. Build the Docker Image
+### 1. Portainer Stack (Recommended for VPS)
 
-```bash
-docker build -t webhook-payment:alpine-uv .
+Create a new stack in Portainer using the provided [`docker-compose.yml`](docker-compose.yml):
+
+```yaml
+version: "3.8"
+
+services:
+  app:
+    image: ghcr.io/jhonatanrian/webhook-payment:latest
+    restart: always
+    environment:
+      - ENVIRONMENT=${ENVIRONMENT:-sandbox}
+      - DATABASE_URL=sqlite+aiosqlite:////data/webhook_payment.db
+      - STARK_PROJECT_ID=${STARK_PROJECT_ID}
+      - STARK_PRIVATE_KEY=${STARK_PRIVATE_KEY}
+      - SCHEDULER_MODE=${SCHEDULER_MODE:-once}
+      - SCHEDULER_INTERVAL_MINUTES=${SCHEDULER_INTERVAL_MINUTES:-180}
+    volumes:
+      - payment_data:/data
+    networks:
+      - public
+    deploy:
+      replicas: 1
+      labels:
+        - "traefik.enable=true"
+        - "traefik.docker.network=public"
+        - "traefik.http.routers.payment.rule=Host(`${DOMAIN:-payment.jrmdev.com.br}`)"
+        - "traefik.http.routers.payment.entrypoints=websecure"
+        - "traefik.http.routers.payment.tls.certresolver=myresolver"
+        - "traefik.http.services.payment.loadbalancer.server.port=8080"
+
+volumes:
+  payment_data:
+    name: webhook_payment_data
+
+networks:
+  public:
+    external: true
 ```
 
-### 2. Run the Container
+### 2. Auto-Deploy with Portainer Webhooks
 
-* **Using `.env` file:**
-  ```bash
-  docker run -d --rm --name webhook-payment \
-    -p 8080:8080 \
-    --env-file .env \
-    webhook-payment:alpine-uv
-  ```
-
-* **Or using inline environment variables:**
-  ```bash
-  docker run -d --rm --name webhook-payment \
-    -p 8080:8080 \
-    -e ENVIRONMENT=sandbox \
-    -e STARK_PROJECT_ID="<YOUR_PROJECT_ID>" \
-    -e STARK_PRIVATE_KEY="$(cat privateKey.pem)" \
-    webhook-payment:alpine-uv
-  ```
+Enable **Auto-update / Webhook** in your Portainer stack and set the secret `PORTAINER_WEBHOOK_URL` in GitHub Secrets. Every merge to `master` will build the image to GHCR and notify Portainer to redeploy automatically!
 
 ### 3. Access Interactive API Documentation
 
