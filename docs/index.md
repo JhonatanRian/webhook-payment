@@ -38,7 +38,7 @@ flowchart LR
 | **Banco de Dados & ORM** | **SQLite + SQLAlchemy 2.0 (Async)** | Persistência assíncrona com `aiosqlite`, repositórios genéricos e isolamento transacional. |
 | **Migrações de Esquema** | **Alembic** | Versionamento e evolução de schema com execução automática no boot do container. |
 | **Agendador em Background** | **APScheduler 3.10+** | Motor assíncrono para controle de ciclos de 24 horas, intervalos dinâmicos e modos configuráveis. |
-| **Qualidade & Linters** | **Ruff & Pytest** | Linter e formatador de alto desempenho (Ruff) e suíte de testes com cobertura mínima de 90% (alcançando 98%). |
+| **Qualidade & Linters** | **Ruff & Pytest** | Linter e formatador de alto desempenho (Ruff) e suíte de testes com cobertura mínima de 90% (alcançando 100%). |
 | **Container & Entrega** | **Docker Alpine + GHCR + Portainer** | Imagem minimalista de 70 MB no GitHub Packages e deploy contínuo automático via Webhook no Portainer. |
 
 ---
@@ -51,5 +51,5 @@ Explore os tópicos detalhados no menu superior:
 2. **[Regras de Negócio & Ciclos](business-rules.md)** — Funcionamento dos ciclos de 24h, modos `once` vs `recurring`, liquidação Pix e verificação ECDSA.
 3. **[Catálogo de Endpoints](api-reference.md)** — Documentação de rotas, contratos de entrada/saída e códigos HTTP.
 4. **[Deploy & Infraestrutura](deployment.md)** — Pipeline de CI/CD no GitHub Actions, GHCR, Portainer e proxy Traefik com SSL automático.
-5. **[Estratégia de Testes](testing.md)** — Estrutura de 78 testes, testes adversariais de concorrência, idempotência e cobertura.
+5. **[Estratégia de Testes](testing.md)** — Estrutura de 91 testes, testes adversariais de concorrência, idempotência e cobertura de 100%.
 6. **[Ferramental & Configurações](tooling.md)** — Guia do `pyproject.toml`, Astral `uv`, formatação Ruff e Git pre-push hooks.

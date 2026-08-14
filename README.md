@@ -17,7 +17,7 @@ Acesse o portal completo de documentação publicado no **[GitHub Pages](https:/
 * 📋 **[Regras de Negócio & Ciclos de 24h](docs/business-rules.md)** — Motor do agendador, modos `once` vs `recurring`, cálculo de valor líquido e assinaturas ECDSA.
 * 📌 **[Catálogo Completo de Endpoints](docs/api-reference.md)** — Especificação de rotas, contratos de entrada/saída e códigos de status.
 * 🚢 **[Deploy, Infraestrutura & CI/CD](docs/deployment.md)** — Imagem Alpine de 70 MB com `uv`, GHCR, Portainer Webhooks e Traefik v3.
-* 🧪 **[Estratégia de Testes & Qualidade](docs/testing.md)** — 78 testes automatizados, concorrência adversarial, idempotência e cobertura de 98%.
+* 🧪 **[Estratégia de Testes & Qualidade](docs/testing.md)** — 91 testes automatizados, concorrência adversarial, idempotência e cobertura de 100%.
 * 🛠️ **[Ferramental, Linters & Configurações](docs/tooling.md)** — Astral `uv`, Ruff, configurações do `pyproject.toml` e Git pre-push hooks.
 
 ---

@@ -37,7 +37,7 @@ A pipeline em [`.github/workflows/deploy.yml`](file:///home/jhonatan/projects/we
 
 ```mermaid
 flowchart LR
-    PUSH["Git Push to 'master'"] --> TEST["1. Quality Gate\n- Ruff Format & Lint\n- Pytest (78 Testes)\n- Codecov Upload"]
+    PUSH["Git Push to 'master'"] --> TEST["1. Quality Gate\n- Ruff Format & Lint\n- Pytest (91 Testes)\n- Codecov Upload"]
     TEST --> BUILD["2. Build & Push GHCR\n- Docker Buildx + GHA Cache\n- ghcr.io/jhonatanrian/webhook-payment"]
     BUILD --> PORTAINER["3. Portainer Webhook\n- POST https://portainer.../api/webhooks/...\n- VPS atualiza container em 3s"]
 ```
