@@ -32,6 +32,11 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db() -> None:
+    from app.modules.invoice.model import InvoiceBatch, InvoiceRecord  # noqa: F401
+    from app.modules.scheduler.model import ScheduleCycleRecord, SchedulerStateRecord  # noqa: F401
+    from app.modules.transfer.model import TransferRecord  # noqa: F401
+    from app.modules.webhook.model import WebhookEventRecord  # noqa: F401
+
     try:
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
