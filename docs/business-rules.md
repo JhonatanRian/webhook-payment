@@ -1,98 +1,97 @@
 # 📋 Regras de Negócio & Motor do Agendador
 
-Este documento detalha o fluxo de ciclo de vida das faturas, o funcionamento do agendador periódico de 24 horas, os modos de operação e o processamento de liquidação via Webhook.
+Este documento explica como o sistema opera na prática: o agendador de emissões periódicas, os modos de execução, o cálculo financeiro de taxas e a validação criptográfica de Webhooks.
 
 ---
 
-## ⏰ O Ciclo de Emissão Periódica (24 Horas)
+## ⏰ O Ciclo de Emissões (24 Horas / A cada 3 Horas)
 
-A cada **3 horas** (`SCHEDULER_INTERVAL_MINUTES = 180`), o sistema dispara um ciclo automatizado de emissão de faturas no ambiente Sandbox da Stark Bank:
+A cada **3 horas** (`SCHEDULER_INTERVAL_MINUTES = 180`), o sistema dispara um ciclo automático para gerar um lote de faturas Pix no Sandbox da Stark Bank:
 
 ```mermaid
 flowchart TD
-    START["⏰ Timer APScheduler Dispara (a cada 3h)"] --> CHECK_MODE{"Verifica Modo do Scheduler"}
+    START["⏰ Timer APScheduler Dispara (a cada 3h)"] --> CHECK_MODE{"Qual o Modo Ativo?"}
     
-    CHECK_MODE -->|Modo 'once'| CHECK_ONCE{"Ciclos Concluídos >= 8?"}
-    CHECK_ONCE -->|Sim| STOP["🛑 Limite de 8 ciclos atingido. Pula execução."]
-    CHECK_ONCE -->|Não| GENERATE["🎲 Gera Lote de 8 a 12 Faturas Randômicas"]
+    CHECK_MODE -->|"Modo 'once'"| CHECK_ONCE{"Já concluiu 8 ciclos?"}
+    CHECK_ONCE -->|"Sim"| STOP["🛑 Limite de 8 ciclos atingido. Aguarda em repouso."]
+    CHECK_ONCE -->|"Não"| GENERATE["🎲 Gera Lote de 8 a 12 Faturas Pix"]
     
-    CHECK_MODE -->|Modo 'recurring'| CHECK_REC{"Ciclos nas últimas 24h >= 8?"}
-    CHECK_REC -->|Sim| SKIP["⏳ Cota de 24h atingida. Aguarda janela deslizante."]
-    CHECK_REC -->|Não| GENERATE
+    CHECK_MODE -->|"Modo 'recurring'"| CHECK_REC{"Já rodou 8 ciclos nas últimas 24h?"}
+    CHECK_REC -->|"Sim"| SKIP["⏳ Cota diária atingida. Aguarda a janela móvel abrir vaga."]
+    CHECK_REC -->|"Não"| GENERATE
 
-    GENERATE --> SEND_STARK["🏦 Envia Faturas para a Stark Bank API"]
-    SEND_STARK --> SAVE_DB["💾 Salva InvoiceBatchRecord e InvoiceRecords no SQLite"]
-    SAVE_DB --> RECORD_CYCLE["📝 Grava ScheduleCycleRecord como 'completed'"]
+    GENERATE --> SEND_STARK["🏦 Envia faturas para a Stark Bank API"]
+    SEND_STARK --> SAVE_DB["💾 Salva o lote e faturas no banco de dados"]
+    SAVE_DB --> RECORD_CYCLE["📝 Registra o ciclo como 'completed'"]
 ```
 
 ---
 
-## ⚙️ Modos de Operação do Agendador
+## ⚙️ Modos do Agendador: `once` vs `recurring`
 
-O sistema suporta **dois modos dinâmicos** configuráveis via variável de ambiente (`SCHEDULER_MODE`) ou pela API em tempo de execução (`PUT /api/v1/scheduler/mode`):
+O enunciado do desafio pedia para emitir faturas a cada 3 horas durante 24 horas. Para cobrir tanto o teste pontual de avaliação quanto uma operação de produção real, criamos dois modos configuráveis:
 
-### 1. Modo `once`
-- **Comportamento:** Executa rigorosamente **até 8 ciclos** (totalizando 24 horas a cada 3 horas) e, após atingir a meta, **encerra as emissões automáticas** mantendo o agendador em espera.
-- **Caso de uso:** Ideal para bater a meta exata de testes de 24h sem gerar cobranças indefinidas no Sandbox.
+### 1. Modo `once` (Padrão para Avaliação / Sandbox)
+- **Como funciona**: O sistema executa rigorosamente **8 ciclos** (8 × 3h = 24 horas) e, ao bater a meta, **encerra as emissões automáticas**.
+- **Por que criamos**: Evita que a aplicação continue emitindo faturas indefinidamente no Sandbox após o término do teste.
 
 ### 2. Modo `recurring` (Produção Contínua)
-- **Comportamento:** Opera continuamente em produção. Utiliza uma **janela deslizante de 24 horas** para garantir que nunca sejam emitidos mais de 8 lotes dentro de qualquer intervalo de 24 horas (`get_completed_cycle_count_in_24h`).
-- **Caso de uso:** Ambientes de produção onde a operação precisa rodar ininterruptamente respeitando o teto diário.
+- **Como funciona**: Roda continuamente 24/7, utilizando uma **janela deslizante de 24 horas** para garantir que nunca sejam disparados mais de 8 lotes dentro de qualquer intervalo de 24 horas.
+- **Por que criamos**: Adequado para cenários onde a aplicação fica ligada direto em produção sem intervenção manual.
+
+> **Dica**: Você pode alternar o modo em tempo de execução via `PUT /api/v1/scheduler/mode` ou disparar um ciclo imediatamente com `POST /api/v1/scheduler/trigger`.
 
 ---
 
-## 🖐️ Disparos Manuais vs. Agendados
+## 🖐️ Disparos Agendados vs. Disparos Manuais
 
-O sistema faz distinção explícita entre ciclos automáticos e execuções manuais sob demanda:
-
-| Tipo | Origem | Consome Cota de Ciclos? | Registro |
+| Tipo de Disparo | Origem | Consome a Cota do Ciclo? | Como é Registrado? |
 | :--- | :--- | :--- | :--- |
-| **`scheduled`** | Timer do APScheduler (a cada 3h) | ✅ **Sim** (incrementa contador de 24h) | `trigger_type: "scheduled"` |
+| **`scheduled`** | Timer automático do APScheduler | ✅ **Sim** (conta para a cota de 8 ciclos) | `trigger_type: "scheduled"` |
 | **`manual`** | `POST /api/v1/scheduler/trigger` | ❌ **Não** (não consome cota agendada) | `trigger_type: "manual"` |
-| **`batch avulso`** | `POST /api/v1/invoices/batch` | ❌ **Não** (emissão direta do módulo) | Apenas em `invoice_batches` |
+| **`batch avulso`** | `POST /api/v1/invoices/batch` | ❌ **Não** (emissão direta do módulo) | Salva direto em `invoice_batches` |
 
 ---
 
-## 📬 Recepção de Webhook & Verificação Criptográfica ECDSA
+## 📬 Recepção do Webhook & Assinatura ECDSA
 
-Quando uma fatura Pix é paga no Sandbox do Stark Bank, a plataforma envia um Webhook HTTP `POST` para o endpoint `/api/v1/webhooks/starkbank`.
+Quando uma fatura Pix é paga no Sandbox, a Stark Bank envia uma notificação HTTP `POST` para o endpoint `/api/v1/webhooks/starkbank`.
 
 ```mermaid
 sequenceDiagram
     autonumber
     participant SB as 🏦 Stark Bank Sandbox
     participant WH as 📬 Módulo Webhook
-    participant DB as 💾 SQLite Database
+    participant DB as 💾 Banco de Dados
     participant TR as 💸 Módulo Transfer
 
-    SB->>WH: POST /api/v1/webhooks/starkbank (Body + Digital-Signature)
-    WH->>WH: 1. Valida presença do cabeçalho Digital-Signature
-    WH->>WH: 2. starkbank.event.parse(body, signature) com chave pública
+    SB->>WH: POST /api/v1/webhooks/starkbank (com header Digital-Signature)
+    WH->>WH: 1. Valida presença da assinatura
+    WH->>WH: 2. starkbank.event.parse(body, signature) com a chave pública
     alt Assinatura Inválida
         WH-->>SB: 400 Bad Request (invalid_signature)
     end
-    WH->>DB: 3. Checa idempotência (event_id já processado?)
+    WH->>DB: 3. Checa se o event_id já foi processado (Idempotência)
     alt Event ID Duplicado
-        WH-->>SB: 200 OK (Evento já recebido anteriormente)
+        WH-->>SB: 200 OK (já processado)
     end
-    WH->>DB: 4. Grava WebhookEventRecord no banco
-    alt Evento é "credited" de Invoice
-        WH->>TR: 5. Dispara transferência de liquidação
+    WH->>DB: 4. Salva WebhookEventRecord
+    alt Evento é "invoice.credited"
+        WH->>TR: 5. Solicita transferência do valor líquido
         TR->>TR: 6. Calcula valor líquido: amount - fee
         TR->>SB: 7. starkbank.transfer.create(net_amount, target_account)
-        TR->>DB: 8. Grava TransferRecord com status "success"
+        TR->>DB: 8. Salva TransferRecord com status "success"
     end
-    WH-->>SB: 200 OK (processed)
+    WH-->>SB: 200 OK (processado com sucesso)
 ```
 
 ---
 
-## 💸 Regra de Transferência de Valor Líquido
+## 💸 Regras Financeiras da Transferência de Liquidação
 
-A regra de transferência obedece às seguintes premissas financeiras:
-
-1. **Filtro de Evento:** Apenas eventos onde `subscription == "invoice"` e `log.type == "credited"` disparam transferências. Eventos de outros tipos (como `created`, `canceled` ou `overdue`) são registrados no banco com status `ignored` e respondem `200 OK`.
-2. **Cálculo do Valor Líquido:**
+1. **Filtro de Evento**: Apenas eventos onde `subscription == "invoice"` e `log.type == "credited"` acionam repasse. Outros tipos de evento (ex: `canceled`, `overdue`) são gravados para histórico e respondem `200 OK`.
+2. **Cálculo em Centavos (Inteiros)**:
    $$\text{Valor da Transferência} = \text{invoice.amount} - \text{invoice.fee}$$
-3. **Proteção contra Valor Não-Positivo:** Se o valor líquido for $\le 0$, a transferência não é enviada e um log de aviso é registrado.
-4. **Conta de Destino:** O valor líquido é transferido para os dados bancários institucionais configurados nas variáveis de ambiente (`TARGET_TAX_ID`, `TARGET_BANK_CODE`, `TARGET_BRANCH_CODE`, `TARGET_ACCOUNT_NUMBER`, `TARGET_ACCOUNT_TYPE`).
+   *Usamos inteiros para evitar qualquer erro de arredondamento de float.*
+3. **Validação de Valor Positivo**: Se por algum motivo o valor líquido for menor ou igual a zero ($\le 0$), a transferência é bloqueada e uma exceção de regra de negócio é lançada.
+4. **Proteção contra Faturas Externas**: Se o webhook reportar uma fatura que não foi emitida por esta instância da aplicação, o evento é registrado para auditoria, mas nenhuma transferência é executada, evitando transferências indevidas.

@@ -1,35 +1,45 @@
-# Webhook Payment Integration with Stark Bank
+# Stark Bank Webhook & Payment Integration
 
 [![CI/CD Pipeline](https://github.com/JhonatanRian/webhook-payment/actions/workflows/deploy.yml/badge.svg)](https://github.com/JhonatanRian/webhook-payment/actions/workflows/deploy.yml)
 [![codecov](https://codecov.io/gh/JhonatanRian/webhook-payment/branch/master/graph/badge.svg)](https://codecov.io/gh/JhonatanRian/webhook-payment)
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
 [![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
 
-FastAPI application built with a **Modular Monolith** architecture for payment and webhook integration with the Stark Bank Sandbox API. The system issues batches of 8 to 12 invoices at configurable intervals (`SCHEDULER_INTERVAL_MINUTES`, default 180 min / 3 hours) via APScheduler over a 24-hour cycle, receives credit notifications via ECDSA-signed Webhooks, and automatically transfers credited net amounts to the designated Stark Bank account.
+Asynchronous FastAPI backend built with a **Modular Monolith** architecture for integrating with the **Stark Bank Sandbox API**. 
+
+The service automates the lifecycle of issuing batches of 8 to 12 Pix invoices every 3 hours over a 24-hour cycle, handles incoming ECDSA-signed webhook credit notifications with strict idempotency, and automatically triggers payout transfers of the credited net amounts back to the institution's account.
 
 ---
 
-## 📖 Conheça o Projeto (Documentação Completa)
+## 📚 Documentation Index
 
-Acesse o portal completo de documentação publicado no **[GitHub Pages](https://jhonatanrian.github.io/webhook-payment/)** ou navegue pelos tópicos na pasta [`docs/`](docs/index.md):
+Detailed documentation is available in Portuguese within the [`docs/`](docs/) directory:
 
-* 🏛️ **[Arquitetura & Design de Software](docs/architecture.md)** — Estrutura em Monólito Modular, separação em 4 camadas e banco assíncrono.
-* 📋 **[Regras de Negócio & Ciclos de 24h](docs/business-rules.md)** — Motor do agendador, modos `once` vs `recurring`, cálculo de valor líquido e assinaturas ECDSA.
-* 📌 **[Catálogo Completo de Endpoints](docs/api-reference.md)** — Especificação de rotas, contratos de entrada/saída e códigos de status.
-* 🚢 **[Deploy, Infraestrutura & CI/CD](docs/deployment.md)** — Imagem Alpine de 70 MB com `uv`, GHCR, Portainer Webhooks e Traefik v3.
-* 🧪 **[Estratégia de Testes & Qualidade](docs/testing.md)** — 103 testes automatizados, concorrência adversarial, idempotência e cobertura de 100%.
-* 🛠️ **[Ferramental, Linters & Configurações](docs/tooling.md)** — Astral `uv`, Ruff, configurações do `pyproject.toml` e Git pre-push hooks.
+- 🏛️ **[Architecture & Design (`docs/architecture.md`)](docs/architecture.md)** — Modular Monolith design, 4-layer separation, async database, and threadpool delegation.
+- 📋 **[Business Rules & 24h Cycles (`docs/business-rules.md`)](docs/business-rules.md)** — Scheduler engine, `once` vs `recurring` modes, net amount math, and ECDSA signature verification.
+- 📌 **[API Reference (`docs/api-reference.md`)](docs/api-reference.md)** — Endpoints, request/response contracts, query parameters, and status codes.
+- 🚢 **[Deployment & Infrastructure (`docs/deployment.md`)](docs/deployment.md)** — 70 MB Alpine multi-stage Docker build, GHCR, Traefik v3 reverse proxy, and Portainer auto-deploy.
+- 🧪 **[Testing Strategy (`docs/testing.md`)](docs/testing.md)** — Unit, integration, and adversarial concurrency tests with 100% code coverage.
+- 🛠️ **[Tooling & Config (`docs/tooling.md`)](docs/tooling.md)** — Astral `uv`, Ruff linter/formatter, and pre-push Git hooks.
 
 ---
 
-## 🔑 Prerequisites: ECDSA Private & Public Keys
+## 💡 Engineering Decision: Scheduler Modes (`once` vs `recurring`)
 
-To authenticate and operate with Stark Bank (Sandbox or Production), you need an **ECDSA key pair** (`secp256k1`).
+The challenge required generating invoices every 3 hours over a 24-hour period. Because this can be interpreted as either a fixed test evaluation or a continuous production schedule, both modes were implemented:
 
-1. **Generate your keys**:
-   Follow the official Stark Bank guide: **[How to Create ECDSA Keys](https://docs.starkbank.com/how-to-create-ecdsa-keys)**
+1. **`once` (Default for Sandbox Evaluation)**: Runs exactly **8 cycles** (8 cycles × 3 hours = 24 hours) and then stops automated generation. This completes the test challenge cleanly without continuously polluting the sandbox environment.
+2. **`recurring` (Continuous Production)**: Runs indefinitely using a **24-hour rolling window** to enforce a maximum of 8 cycles per 24-hour period.
 
-   Alternatively, you can generate them using the Python SDK:
+> The mode can be changed at runtime via `PUT /api/v1/scheduler/mode` or triggered on-demand via `POST /api/v1/scheduler/trigger`.
+
+---
+
+## 🔑 Prerequisites: ECDSA Key Pair
+
+Authentication with Stark Bank requires an ECDSA key pair (`secp256k1`).
+
+1. **Generate your keys** using Python:
    ```python
    import starkbank
 
@@ -38,139 +48,91 @@ To authenticate and operate with Stark Bank (Sandbox or Production), you need an
    print("Public Key:\n", public_key)
    ```
 
-2. **Register the Public Key**:
-   Copy the generated `public_key` and register it in the [Stark Bank Sandbox Dashboard](https://sandbox.starkbank.com) under **Settings > Keys / Projects**.
+2. **Register the Public Key** in the [Stark Bank Sandbox Dashboard](https://sandbox.starkbank.com) under **Settings > Keys / Projects**.
 
-3. **Save your Private Key**:
-   Keep your `private_key` safe. You can supply it via the `.env` file or environment variables (`STARK_PRIVATE_KEY` or `STARK_PRIVATE_KEY_PATH`).
+3. **Configure the Private Key** in your `.env` file via `STARK_PRIVATE_KEY` (raw PEM string) or `STARK_PRIVATE_KEY_PATH` (file path).
 
 ---
 
-## 🐳 Deployment with Docker & Portainer (VPS + Traefik)
+## 🚀 Quickstart (Local Development)
 
-The project includes an ultra-lightweight, production-grade **Alpine Linux** container image (`ghcr.io/jhonatanrian/webhook-payment:latest`) built with **Astral `uv`**, **Nginx Unix Domain Socket Reverse Proxy**, and **Pure Uvicorn**.
+This project uses [Astral `uv`](https://docs.astral.sh/uv/) for Python package management.
 
-### 1. Portainer Stack (Recommended for VPS)
-
-Create a new stack in Portainer using the provided [`docker-compose.yml`](docker-compose.yml):
-
-```yaml
-version: "3.8"
-
-services:
-  app:
-    image: ghcr.io/jhonatanrian/webhook-payment:latest
-    restart: always
-    environment:
-      - ENVIRONMENT=${ENVIRONMENT:-sandbox}
-      - DATABASE_URL=sqlite+aiosqlite:////data/webhook_payment.db
-      - STARK_PROJECT_ID=${STARK_PROJECT_ID}
-      - STARK_PRIVATE_KEY=${STARK_PRIVATE_KEY}
-      - SCHEDULER_MODE=${SCHEDULER_MODE:-once}
-      - SCHEDULER_INTERVAL_MINUTES=${SCHEDULER_INTERVAL_MINUTES:-180}
-    volumes:
-      - payment_data:/data
-    networks:
-      - public
-    deploy:
-      replicas: 1
-      labels:
-        - "traefik.enable=true"
-        - "traefik.docker.network=public"
-        - "traefik.http.routers.payment.rule=Host(`${DOMAIN:-payment.jrmdev.com.br}`)"
-        - "traefik.http.routers.payment.entrypoints=websecure"
-        - "traefik.http.routers.payment.tls.certresolver=myresolver"
-        - "traefik.http.services.payment.loadbalancer.server.port=8080"
-
-volumes:
-  payment_data:
-    name: webhook_payment_data
-
-networks:
-  public:
-    external: true
-```
-
-### 2. Auto-Deploy with Portainer Webhooks
-
-Enable **Auto-update / Webhook** in your Portainer stack and set the secret `PORTAINER_WEBHOOK_URL` in GitHub Secrets. Every merge to `master` will build the image to GHCR and notify Portainer to redeploy automatically!
-
-### 3. Access Interactive API Documentation
-
-- **Swagger UI:** [http://localhost:8080/docs](http://localhost:8080/docs)
-- **ReDoc:** [http://localhost:8080/redoc](http://localhost:8080/redoc)
-- **Health Check:** [http://localhost:8080/health](http://localhost:8080/health)
-
----
-
-## 💻 Local Development Setup (Without Docker)
-
-### 1. Install Dependencies with `uv`
-
+### 1. Install dependencies
 ```bash
 uv sync --dev
 ```
 
-### 2. Configure Environment Variables (`.env`)
-
-Copy the example configuration file and fill in your credentials:
+### 2. Configure environment
 ```bash
 cp .env.example .env
+# Edit .env and fill in your STARK_PROJECT_ID and STARK_PRIVATE_KEY
 ```
 
-### 3. Run Database Migrations (SQLite + Alembic)
-
+### 3. Run database migrations
 ```bash
-alembic upgrade head
+uv run alembic upgrade head
 ```
 
-### 4. Start the Development Server (FastAPI)
-
+### 4. Start the server
 ```bash
-uvicorn app.main:app --reload
+uv run uvicorn app.main:app --reload --port 8000
 ```
+
+- **Interactive Swagger Docs:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **ReDoc:** [http://localhost:8000/redoc](http://localhost:8000/redoc)
+- **Health Check:** [http://localhost:8000/health](http://localhost:8000/health)
 
 ---
 
-## 🧪 Test Suite
-
-Run all unit, integration, and adversarial tests with Pytest and coverage report:
+## 🧪 Testing & Code Quality
 
 ```bash
+# Run all tests with coverage report
 uv run pytest -v --cov=app --cov-report=term-missing
+
+# Run Ruff linter and formatter checks
+uv run ruff check .
+uv run ruff format --check .
 ```
 
 ---
 
-## 🧹 Code Quality & Linter (Ruff)
+## 🐳 Docker Deployment & Production Telemetry
 
-* **Check lint and import ordering:**
-  ```bash
-  uv run ruff check .
-  ```
+The repository includes a production-ready, ultra-lightweight (~70 MB) Alpine Docker container running Uvicorn behind an Nginx Unix socket reverse proxy:
 
-* **Automatically fix lint issues:**
-  ```bash
-  uv run ruff check --fix .
-  ```
+```bash
+# Build and run with docker-compose
+docker compose up -d --build
+```
 
-* **Format codebase:**
-  ```bash
-  uv run ruff format .
-  ```
+### 📊 Real Production Telemetry (VPS + Portainer)
+
+![Production Server Telemetry](docs/assets/server-metrics.png)
+
+| Metric | Measured Value | Baseline / Capacity | Status |
+| :--- | :---: | :---: | :---: |
+| **RAM (Memory)** | **~3.5 MB** *(Megabytes, not GB)* | ~0.3% of a 1 GB VPS | 🟢 Ultra-lightweight |
+| **CPU Usage** | **< 0.2%** | Idle baseline | 🟢 Negligible load |
+| **Network I/O** | **~420 kB** | Active Stark Bank polling | 🟢 Healthy |
+| **Disk Write** | **~8 kB** | Non-blocking SQLite I/O | 🟢 Minimal |
+
+> ℹ️ **Note on chart scale:** The memory chart Y-axis is automatically scaled by Portainer to a maximum of **3.5 MB** (not gigabytes). The application is idling at ~3.4 MB total RSS memory footprint.
 
 ---
 
-## 📌 API Endpoints
+## 📌 Main API Endpoints
 
 | Method | Endpoint | Description |
 | :--- | :--- | :--- |
-| `POST` | `/api/v1/webhooks/starkbank` | Webhook endpoint validating ECDSA signatures and dispatching payouts |
-| `POST` | `/api/v1/invoices/batch` | Manually triggers issuance of a batch of 8–12 invoices |
-| `GET` | `/api/v1/invoices/batches` | Lists all issued invoice batches and items |
-| `GET` | `/api/v1/transfers` | Lists recorded payout transfers |
-| `GET` | `/api/v1/scheduler/status` | Returns scheduler status (completed cycles, remaining, mode, next run) |
+| `POST` | `/api/v1/webhooks/starkbank` | Webhook receiver; validates ECDSA signature and initiates net payout |
+| `POST` | `/api/v1/invoices/batch` | Manually generates an invoice batch (8–12 invoices) |
+| `GET` | `/api/v1/invoices/batches` | Paginated list of issued invoice batches and items |
+| `GET` | `/api/v1/invoices` | Paginated list of individual invoices with status filter |
+| `GET` | `/api/v1/transfers` | Paginated list of payout transfers |
+| `GET` | `/api/v1/scheduler/status` | Current scheduler status (completed cycles, mode, next run) |
 | `POST` | `/api/v1/scheduler/trigger` | Triggers an immediate on-demand invoice cycle |
 | `PUT` | `/api/v1/scheduler/mode` | Updates scheduler mode (`once` vs `recurring`) |
-| `POST` | `/api/v1/scheduler/reset` | Resets stored cycle execution history in database |
+| `POST` | `/api/v1/scheduler/reset` | Resets cycle execution history in the database |
 | `GET` | `/health` | Application health check endpoint |

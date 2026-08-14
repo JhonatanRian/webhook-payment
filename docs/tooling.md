@@ -1,25 +1,25 @@
 # 🛠️ Ferramental, Linters & Configurações
 
-O projeto segue os padrões mais modernos de engenharia de software no ecossistema Python, unificando dependências, linters, testes e hooks em um único arquivo de configuração padronizado ([`pyproject.toml`](file:///home/jhonatan/projects/webhook-payment/pyproject.toml)).
+Aqui detalhamos as ferramentas e práticas adotadas no desenvolvimento do projeto para manter o código padronizado e limpo.
 
 ---
 
 ## ⚡ Gerenciamento de Dependências com Astral `uv`
 
-O projeto utiliza o **Astral `uv`**, um gerenciador de pacotes ultra-rápido escrito em Rust:
+Optamos pelo **Astral `uv`**, um gerenciador de pacotes ultra-rápido escrito em Rust:
 
-- **Instalação Determinística:** O arquivo `uv.lock` garante que as exatas mesmas versões sejam instaladas em desenvolvimento, testes e no container Docker.
-- **Ambiente Isolado Automático:** O comando `uv run` executa ferramentas (`pytest`, `ruff`, `alembic`) diretamente dentro do virtualenv sem necessidade de ativação manual (`source .venv/bin/activate`).
+- **Instalação Determinística**: O arquivo `uv.lock` garante que todo mundo (desenvolvedores, CI e container Docker) utilize exatamente as mesmas versões das bibliotecas.
+- **Execução Direta**: O comando `uv run` executa ferramentas (`pytest`, `ruff`, `alembic`) no ambiente virtual automaticamente, sem você precisar ativar a virtualenv na mão (`source .venv/bin/activate`).
 
-### Comandos Úteis do `uv`:
+### Comandos do Dia a Dia:
 ```bash
-# Sincronizar todas as dependências de desenvolvimento
+# Sincronizar o ambiente com todas as dependências
 uv sync --dev
 
-# Adicionar uma nova biblioteca de produção
+# Adicionar uma nova biblioteca
 uv add nome-do-pacote
 
-# Adicionar uma biblioteca de desenvolvimento
+# Adicionar uma dependência apenas para desenvolvimento
 uv add --dev nome-do-pacote
 ```
 
@@ -27,7 +27,7 @@ uv add --dev nome-do-pacote
 
 ## 🧹 Linter & Formatador de Código (Ruff)
 
-Substituímos múltiplas ferramentas legadas (como Flake8, Black e isort) pelo **Ruff**, que é centenas de vezes mais rápido e garante conformidade com as PEPs mais recentes.
+Usamos o **Ruff** para substituir ferramentas tradicionais como Flake8, Black e isort em um único utilitário rápido:
 
 ### Configuração no `pyproject.toml`:
 ```toml
@@ -38,24 +38,24 @@ exclude = [".venv", "alembic/versions"]
 
 [tool.ruff.lint]
 select = [
-    "E",   # Erros de sintaxe e estilo PEP 8
+    "E",   # Erros de estilo PEP 8
     "W",   # Avisos PEP 8
-    "F",   # Checagens do Pyflakes (variáveis não usadas, imports soltos)
-    "I",   # Organização e ordenação automática de imports (isort)
-    "C90", # Complexidade ciclomática de funções
+    "F",   # Checagens do Pyflakes (variáveis não usadas, imports)
+    "I",   # Ordenação automática de imports (isort)
+    "C90", # Complexidade ciclomática
     "UP",  # Modernização de sintaxe para Python 3.12+ (pyupgrade)
 ]
 ```
 
-### Comandos do Ruff:
+### Comandos Úteis do Ruff:
 ```bash
-# Checar conformidade de linter e ordenação de imports
+# Verificar problemas de código e ordenação de imports
 uv run ruff check .
 
-# Corrigir automaticamente problemas de linter
+# Corrigir problemas automaticamente
 uv run ruff check --fix .
 
-# Formatar todo o código do projeto (substituto do Black)
+# Formatar todos os arquivos do projeto
 uv run ruff format .
 
 # Validar se o código está formatado (usado no CI)
@@ -64,25 +64,26 @@ uv run ruff format --check .
 
 ---
 
-## 🛡️ Git Hook de `pre-push` Automatizado
+## 🛡️ Git Hook de `pre-push`
 
-Para evitar que códigos fora do padrão ou testes quebrados sejam enviados para o GitHub, o repositório conta com um hook nativo em [`.githooks/pre-push`](file:///home/jhonatan/projects/webhook-payment/.githooks/pre-push):
+Para garantir que nenhum commit quebrado ou fora do padrão de código suba para o GitHub, o repositório inclui um hook nativo em [`.githooks/pre-push`](../.githooks/pre-push):
 
 ```bash
 #!/bin/sh
 set -e
 
-echo "🔍 [git-hook] Running Ruff format check and linter via uv..."
+echo "🔍 [git-hook] Rodando Ruff e Pytest via uv..."
 
 uv run ruff format --check .
 uv run ruff check .
 uv run pytest --maxfail=1 -q
 
-echo "✅ [git-hook] Code quality and test checks passed!"
+echo "✅ [git-hook] Tudo certo! Push liberado."
 ```
 
-### Como Ativar Localmente:
+### Como Ativar na sua Máquina:
+Basta rodar uma vez no terminal:
 ```bash
 git config core.hooksPath .githooks
 ```
-A partir desse momento, qualquer `git push` executará a validação completa antes de enviar as alterações para o repositório remoto.
+A partir daí, todo `git push` executará a formatação, lint e testes antes de enviar o código.

@@ -1,84 +1,94 @@
 # 🏛️ Arquitetura & Design de Software
 
-A arquitetura do projeto adota o padrão **Monólito Modular (Modular Monolith)**. Esta escolha estratégica combina a simplicidade de desenvolvimento e deploy de um monólito com a alta coesão e baixo acoplamento típicos de microsserviços.
+Nesta seção explicamos como estruturamos a aplicação, quais decisões de design tomamos e como lidamos com os desafios de concorrência e integração financeira.
 
 ---
 
-## 🎯 Por que Escolhemos o Monólito Modular?
+## 🎯 Por que Monólito Modular?
 
-Em aplicações financeiras modernas, a divisão prematura em microsserviços traz alta complexidade operacional (latência de rede, transações distribuídas, tracing complexo, orquestração de containers). Por outro lado, um monólito tradicional desestruturado tende a se tornar um "código espaguete" de difícil manutenção.
+Ao desenhar a aplicação, optamos pelo padrão **Monólito Modular** (Modular Monolith) em vez de dividir prematuramente o sistema em microsserviços ou jogar tudo em um único arquivo desestruturado.
 
-O **Monólito Modular** resolve esse dilema separando a aplicação em **módulos de domínio independentes**, cada um com suas próprias regras, contratos, modelos e repositórios:
-
-| Aspecto | Monólito Tradicional | Microsserviços | Monólito Modular (Nossa Escolha) |
-| :--- | :--- | :--- | :--- |
-| **Limites de Domínio** | ❌ Misturados / Baixa coesão | ✅ Rígidos (via rede) | ✅ **Rígidos (via pacotes isolados)** |
-| **Complexidade de Deploy** | ✅ Simples (1 artefato) | ❌ Alta (dezenas de pipelines) | ✅ **Simples (1 único container de 70 MB)** |
-| **Comunicação entre Módulos** | ❌ Acoplamento direto | ❌ Overhead de rede HTTP/gRPC | ✅ **Chamadas assíncronas em memória** |
-| **Consistência Transacional** | ✅ Fácil (mesmo DB) | ❌ Complexa (Sagas/2PC) | ✅ **Simples (mesma sessão/transação)** |
-| **Facilidade de Testes** | ⚠️ Média | ❌ Difícil (mocks de rede) | ✅ **Excelente (testes isolados e rápidos)** |
+### Principais Motivações:
+1. **Domínios Bem Delimitados**: Cada módulo (`invoice`, `webhook`, `transfer`, `scheduler`) é autocontido, com seus próprios modelos, repositórios, serviços e rotas.
+2. **Simplicidade Operacional**: Rodamos tudo em um único container de ~70 MB, sem a sobrecarga de latência de rede ou orquestração complexa de múltiplos serviços.
+3. **Consistência Transacional**: Operações que envolvem atualização de faturas e registros de auditoria rodam na mesma sessão transacional do banco de dados assíncrono.
+4. **Caminho Claro para Microsserviços**: Se no futuro o módulo de `webhook` ou `transfer` precisar de escalabilidade independente, a extração para um microsserviço é quase direta, pois os limites de contexto já estão desenhados.
 
 ---
 
-## 🗺️ Mapa de Módulos & Camadas
+## 🗺️ Organização das Pastas
 
-A base de código em [`app/`](file:///home/jhonatan/projects/webhook-payment/app) é organizada em módulos funcionais estritamente desacoplados:
+O código em [`app/`](../app) está organizado da seguinte forma:
 
 ```text
 app/
 ├── core/                  # Configurações globais, segurança, logs e middlewares
-│   ├── config.py          # Settings validadas com Pydantic v2
-│   ├── concurrency.py     # Wrapper assíncrono para chamadas síncronas do SDK
-│   ├── logging.py         # Formatação de logs estruturados (JSON/Console)
-│   ├── middleware.py      # Request ID middleware e correlation tracking
-│   ├── starkbank.py       # Inicialização do usuário Stark Bank SDK
-│   └── exceptions/        # Hierarquia tipada de exceções e mapeamento HTTP
+│   ├── config.py          # Settings tipadas com Pydantic v2 (.env)
+│   ├── concurrency.py     # Decorator para rodar o SDK síncrono em threadpool
+│   ├── logging.py         # Formatação de logs estruturados (JSON / Console)
+│   ├── middleware.py      # Middleware para injeção de Request-ID em logs e headers
+│   ├── starkbank.py       # Inicialização das chaves ECDSA do Stark Bank SDK
+│   └── exceptions/        # Hierarquia tipada de exceções e handlers HTTP
 ├── infra/                 # Infraestrutura de banco de dados
 │   └── db/
-│       └── session.py     # Engine async SQLAlchemy e session factory
-├── shared/                # Classes base e contratos compartilhados
-│   ├── models.py          # Base declarativa com UUID e timestamps
-│   └── repository.py      # BaseRepository genérico com CRUD tipado
+│       ├── base.py        # DeclarativeBase desacoplada
+│       └── session.py     # Engine async SQLAlchemy e sessionmaker
+├── shared/                # Contratos e utilitários compartilhados
+│   ├── models.py          # Base model com UUID v4 e timestamps UTC
+│   ├── pagination.py      # Estrutura padronizada de paginação (Page[T])
+│   └── repository.py      # BaseRepository genérico com CRUD assíncrono
 └── modules/               # Módulos de Domínio
-    ├── invoice/           # Emissão e controle de lotes de faturas Pix
-    ├── webhook/           # Recepção, validação criptográfica ECDSA e roteamento
-    ├── transfer/          # Disparo e histórico de transferências de liquidação
-    └── scheduler/         # Controle de ciclos periódicos e jobs APScheduler
+    ├── invoice/           # Emissão e listagem de faturas Pix
+    ├── webhook/           # Recepção e validação de assinaturas ECDSA
+    ├── transfer/          # Disparo de transferências de liquidação
+    └── scheduler/         # Agendador de ciclos periódicos e retomada pós-reinicialização
 ```
 
 ---
 
-## 🧱 Arquitetura em Camadas por Módulo
+## 🧱 As 4 Camadas de Cada Módulo
 
-Cada módulo dentro de `app/modules/<nome>` segue rigorosamente a separação em 4 camadas bem delimitadas:
+Cada módulo de negócio segue estritamente a separação em 4 camadas de responsabilidade:
 
 ```mermaid
 flowchart TD
-    ROUTER["🌐 Router (FastAPI APIRouter)\n- Recebe requisições HTTP\n- Valida schemas Pydantic\n- Retorna códigos de status REST"]
+    ROUTER["🌐 Router (FastAPI)\n- Recebe requisições HTTP\n- Valida dados com Pydantic\n- Injeta dependências da sessão"]
     
-    SERVICE["⚙️ Service (Business Logic)\n- Orquestra regras de negócio\n- Integra com SDK Stark Bank via threadpool\n- Valida valores líquidos e limites"]
+    SERVICE["⚙️ Service (Regras de Negócio)\n- Orquestra a lógica financeira\n- Chama o SDK do Stark Bank em threads\n- Valida valores líquidos e idempotência"]
     
-    REPO["💾 Repository (Data Access)\n- Executa queries SQLAlchemy assíncronas\n- Isola queries SQL do resto do domínio\n- Herda operações de BaseRepository"]
+    REPO["💾 Repository (Acesso a Dados)\n- Executa queries assíncronas no banco\n- Isola queries SQL do resto do sistema"]
     
-    MODEL["🗄️ Model (SQLAlchemy ORM)\n- Mapeia tabelas e relacionamentos\n- Define tipos de colunas e constraints"]
+    MODEL["🗄️ Model (SQLAlchemy)\n- Mapeamento das tabelas\n- Define colunas, tipos e índices"]
 
     ROUTER --> SERVICE
     SERVICE --> REPO
     REPO --> MODEL
 ```
 
-### Exemplo de Responsabilidades:
-1. **`router.py`**: Apenas lida com requisições HTTP, dependências FastAPI (`Depends(get_db)`) e validação de schema.
-2. **`service.py`**: Isola a inteligência do negócio (ex: cálculo de `amount - fee`, geração de dados aleatórios de cliente, chamadas assíncronas ao SDK).
-3. **`repository.py`**: Encapsula queries SQL (ex: contagem de ciclos nas últimas 24h, busca por `event_id`, paginação).
-4. **`model.py`**: Representa a entidade persistida no SQLite.
-5. **`schema.py`**: DTOs (*Data Transfer Objects*) Pydantic para validação e serialização de JSON.
+- **`router.py`**: Apenas recebe a requisição HTTP, aciona a injeção de dependência (`get_db`) e retorna o DTO de resposta.
+- **`service.py`**: Onde mora a lógica de negócio (ex: cálculo de `amount - fee`, chamadas ao SDK externo, tratamento de duplicidade).
+- **`repository.py`**: Métodos de banco específicos (ex: buscar faturas por `stark_invoice_id`, contar ciclos nas últimas 24 horas).
+- **`model.py`** e **`schema.py`**: Modelos ORM da tabela e Schemas Pydantic para validação de entrada/saída.
 
 ---
 
-## 🔐 Tratamento Centralizado de Exceções
+## ⚡ Concorrência & Integração Não-Bloqueante
 
-O sistema implementa uma hierarquia tipada de exceções em [`app/core/exceptions/`](file:///home/jhonatan/projects/webhook-payment/app/core/exceptions), garantindo que erros do SDK da Stark Bank ou regras de domínio violadas nunca causem *HTTP 500 Internal Server Error* genérico:
+### 1. Lidando com o SDK Síncrono da Stark Bank (`@run_in_thread`)
+O SDK oficial do Stark Bank em Python realiza requisições HTTP síncronas e faz cálculos criptográficos intensivos em CPU (assinaturas ECDSA). Se chamássemos o SDK diretamente dentro de rotas `async def`, isso travaria o Event Loop do FastAPI.
+
+Para resolver isso, criamos o decorator [`@run_in_thread`](../app/core/concurrency.py), que despacha a execução síncrona para o pool de threads do `asyncio` (`asyncio.to_thread`), mantendo o Event Loop sempre livre para atender outras requisições.
+
+### 2. Idempotência em Dois Níveis no Webhook
+Webhooks podem ser entregues mais de uma vez ou simultaneamente em caso de retries. Para proteger o sistema contra transferências duplicadas:
+- **Nível 1 (Em Memória)**: Usamos um `asyncio.Lock()` no [`WebhookService`](../app/modules/webhook/service.py) para serializar requisições concorrentes no mesmo processo.
+- **Nível 2 (No Banco de Dados)**: A coluna `event_id` na tabela `webhook_events` possui uma restrição de unicidade (`UNIQUE`). Se duas requisições chegarem ao mesmo tempo, a segunda dispara um `IntegrityError` que é capturado, efetuando `rollback` e retornando `200 OK` para informar que o evento já foi processado.
+
+---
+
+## 🔄 Tratamento de Exceções & RFC 7807
+
+Centralizamos todo o tratamento de erros em [`app/core/exceptions/`](../app/core/exceptions). 
 
 ```mermaid
 classDiagram
@@ -91,21 +101,11 @@ classDiagram
     class StarkBankIntegrationError
     class InvalidSignatureError
     class DuplicateEventError
-    class InvalidCredentialsError
 
     AppBaseException <|-- DomainException
     AppBaseException <|-- StarkBankIntegrationError
     DomainException <|-- InvalidSignatureError
     DomainException <|-- DuplicateEventError
-    StarkBankIntegrationError <|-- InvalidCredentialsError
 ```
 
-Todas as respostas de erro seguem o padrão RFC 7807 estruturado com `error`, `code`, `detail` e `request_id`.
-
----
-
-## 📊 Banco de Dados & Migrações
-
-- **Async SQLAlchemy 2.0:** Utiliza `sqlite+aiosqlite://` para operações de I/O não-bloqueantes.
-- **Alembic:** Todas as alterações de tabela são rastreadas em arquivos de migração versionados no Git (`alembic/versions/`).
-- **Execução Automática no Boot:** O script de inicialização do container ([`docker/entrypoint.sh`](file:///home/jhonatan/projects/webhook-payment/docker/entrypoint.sh)) roda `alembic upgrade head` antes de iniciar os servidores, garantindo que o banco de dados esteja sempre sincronizado.
+Erros do SDK ou regras de negócio são convertidos automaticamente em respostas JSON estruturadas, contendo o código de erro, mensagem amigável e o `request_id` da requisição para rastreabilidade.

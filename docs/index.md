@@ -1,55 +1,50 @@
-# ⚡ Stark Bank Webhook & Payment Integration
+# ⚡ Webhook Payment Integration with Stark Bank
 
-[![CI/CD Pipeline](https://github.com/JhonatanRian/webhook-payment/actions/workflows/deploy.yml/badge.svg)](https://github.com/JhonatanRian/webhook-payment/actions/workflows/deploy.yml)
-[![codecov](https://codecov.io/gh/JhonatanRian/webhook-payment/branch/master/graph/badge.svg)](https://codecov.io/gh/JhonatanRian/webhook-payment)
-[![Python 3.12](https://img.shields.io/badge/python-3.12-blue.svg)](https://www.python.org/)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-
-Bem-vindo à documentação oficial do **Webhook Payment Integration with Stark Bank**. 
-
-Este sistema foi projetado para operar como um **Monólito Modular assíncrono e resiliente**, realizando a emissão automatizada de faturas Pix no ambiente Sandbox da **Stark Bank**, escutando eventos de crédito assinados digitalmente via Webhook e transferindo automaticamente o valor líquido creditado para a conta destino da instituição.
+Bem-vindo à documentação técnica do projeto! Aqui você encontra todos os detalhes sobre a arquitetura, regras de negócio, testes e deploy da integração com o Stark Bank.
 
 ---
 
-## 🎯 Visão Geral do Sistema
+## 🎯 O que é este projeto?
 
-O objetivo principal deste projeto é atender aos requisitos do desafio técnico da Stark Bank com qualidade de software de nível de produção (*production-ready*), arquitetura limpa, testes abrangentes e entrega contínua automatizada.
+Este sistema automatiza o ciclo completo de cobrança e repasse financeiro integrado ao ambiente Sandbox do **Stark Bank**:
+
+1. **Emissão Automatizada**: A cada 3 horas, emite um lote de 8 a 12 faturas Pix aleatórias ao longo de um ciclo de 24 horas.
+2. **Recepção de Webhooks**: Escuta eventos de faturas pagas/creditadas (`invoice.credited`), validando a assinatura criptográfica **ECDSA** enviada pelo Stark Bank.
+3. **Repasse Automático**: Ao confirmar o crédito, calcula o valor líquido (`amount - fee`) e dispara uma transferência automática Pix para a conta destino da instituição.
+4. **Idempotência & Concorrência**: Protege contra entregas duplicadas de webhooks e garante que chamadas síncronas do SDK não travem o Event Loop do FastAPI.
 
 ```mermaid
 flowchart LR
-    SCHEDULER["⏰ APScheduler Engine"] -->|Dispara a cada 3h| INVOICE["🧾 Módulo Invoice"]
-    INVOICE -->|Cria 8 a 12 Faturas Pix| STARK_API["🏦 Stark Bank Sandbox API"]
+    SCHEDULER["⏰ APScheduler Engine"] -->|"Dispara a cada 3h"| INVOICE["🧾 Módulo Invoice"]
+    INVOICE -->|"Cria 8 a 12 Faturas Pix"| STARK_API["🏦 Stark Bank Sandbox API"]
     
-    STARK_API -->|Webhook com Assinatura ECDSA| WEBHOOK["📬 Módulo Webhook"]
-    WEBHOOK -->|Valida Assinatura & Idempotência| TRANSFER["💸 Módulo Transfer"]
-    TRANSFER -->|Transfere Valor Líquido (Amount - Fee)| STARK_API
+    STARK_API -->|"Webhook com Assinatura ECDSA"| WEBHOOK["📬 Módulo Webhook"]
+    WEBHOOK -->|"Valida Assinatura & Idempotência"| TRANSFER["💸 Módulo Transfer"]
+    TRANSFER -->|"Transfere Valor Líquido (Amount - Fee)"| STARK_API
 ```
 
 ---
 
-## 🛠️ Stack Tecnológica
+## 🛠️ Tecnologias Utilizadas
 
-| Componente | Tecnologia | Finalidade |
-| :--- | :--- | :--- |
-| **Linguagem & Runtime** | **Python 3.12** | Tipagem estática moderna (`PEP 695`), performance e sintaxe assíncrona. |
-| **Framework Web** | **FastAPI 0.110+** | Framework web moderno, OpenAPI/Swagger automático e validação estrita com Pydantic v2. |
-| **Gerenciador de Pacotes** | **Astral `uv`** | Gerenciador de dependências ultra-rápido em Rust, compilação de bytecode e locks determinísticos. |
-| **Servidor ASGI & Proxy** | **Uvicorn + Nginx** | Uvicorn nativo com `uvloop` comunicando via Unix Domain Socket (`/tmp/app.sock`) com Nginx reverse proxy. |
-| **Banco de Dados & ORM** | **SQLite + SQLAlchemy 2.0 (Async)** | Persistência assíncrona com `aiosqlite`, repositórios genéricos e isolamento transacional. |
-| **Migrações de Esquema** | **Alembic** | Versionamento e evolução de schema com execução automática no boot do container. |
-| **Agendador em Background** | **APScheduler 3.10+** | Motor assíncrono para controle de ciclos de 24 horas, intervalos dinâmicos e modos configuráveis. |
-| **Qualidade & Linters** | **Ruff & Pytest** | Linter e formatador de alto desempenho (Ruff) e suíte de testes com cobertura mínima de 90% (alcançando 100%). |
-| **Container & Entrega** | **Docker Alpine + GHCR + Portainer** | Imagem minimalista de 70 MB no GitHub Packages e deploy contínuo automático via Webhook no Portainer. |
+- **Python 3.12** com tipagem estática moderna (`PEP 695`).
+- **FastAPI 0.110+** para a API HTTP assíncrona e documentação OpenAPI/Swagger.
+- **Astral `uv`** para gerenciamento de dependências e ambientes determinísticos.
+- **SQLite + SQLAlchemy 2.0 (Async)** com `aiosqlite` para persistência assíncrona.
+- **Alembic** para versionamento e aplicação automática de migrações de banco.
+- **APScheduler** para orquestração de ciclos de agendamento em background.
+- **Ruff & Pytest** para garantia de qualidade, linting e 100% de cobertura de testes.
+- **Docker Alpine + Nginx + Traefik** para container leve (~70 MB) com proxy via Unix socket.
 
 ---
 
-## 🚀 Como Navegar na Documentação
+## 🧭 Guia de Navegação
 
-Explore os tópicos detalhados no menu superior:
+A documentação está dividida nos seguintes arquivos:
 
-1. **[Arquitetura & Design](architecture.md)** — Estrutura em Monólito Modular, separação de camadas e banco de dados.
-2. **[Regras de Negócio & Ciclos](business-rules.md)** — Funcionamento dos ciclos de 24h, modos `once` vs `recurring`, liquidação Pix e verificação ECDSA.
-3. **[Catálogo de Endpoints](api-reference.md)** — Documentação de rotas, contratos de entrada/saída e códigos HTTP.
-4. **[Deploy & Infraestrutura](deployment.md)** — Pipeline de CI/CD no GitHub Actions, GHCR, Portainer e proxy Traefik com SSL automático.
-5. **[Estratégia de Testes](testing.md)** — Estrutura de 103 testes, testes adversariais de concorrência, idempotência e cobertura de 100%.
-6. **[Ferramental & Configurações](tooling.md)** — Guia do `pyproject.toml`, Astral `uv`, formatação Ruff e Git pre-push hooks.
+- 🏛️ **[Arquitetura & Design de Software](architecture.md)**: Como estruturamos o Monólito Modular, a divisão em 4 camadas e as estratégias de concorrência com threads e locks.
+- 📋 **[Regras de Negócio & Ciclos](business-rules.md)**: Como funcionam os modos `once` vs `recurring`, os cálculos financeiros de taxas e a validação ECDSA.
+- 📌 **[Catálogo de Endpoints](api-reference.md)**: Todas as rotas da API com exemplos reais de payload de entrada e saída.
+- 🚢 **[Deploy, Infraestrutura & CI/CD](deployment.md)**: Detalhes do Dockerfile multi-stage, proxy Nginx via socket Unix, Portainer e Traefik v3.
+- 🧪 **[Estratégia de Testes](testing.md)**: Organização dos testes unitários, testes de concorrência massiva e relatórios de cobertura.
+- 🛠️ **[Ferramental & Configurações](tooling.md)**: Dicas de uso do Astral `uv`, comandos do Ruff e ativação do Git pre-push hook.
