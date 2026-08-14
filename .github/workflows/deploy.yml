@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 env:
-  GAR_LOCATION: us-central1
+  GAR_LOCATION: southamerica-east1
   GAR_REPOSITORY: webhook-payment
   IMAGE_NAME: app
 
