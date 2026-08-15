@@ -1,7 +1,24 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
+
+
+class TransferStatus(StrEnum):
+    PENDING = "pending"
+    CREATED = "created"
+    PROCESSING = "processing"
+    SUCCESS = "success"
+    FAILED = "failed"
+    CANCELED = "canceled"
+
+
+class TargetAccountType(StrEnum):
+    PAYMENT = "payment"
+    CHECKING = "checking"
+    SAVINGS = "savings"
+    SALARY = "salary"
 
 
 class TransferResponse(BaseModel):

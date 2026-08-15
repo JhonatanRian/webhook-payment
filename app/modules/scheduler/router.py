@@ -6,8 +6,10 @@ from app.infra.db.session import get_db
 from app.modules.scheduler.repository import ScheduleCycleRepository
 from app.modules.scheduler.schema import (
     SchedulerControlResponse,
+    SchedulerMode,
     SchedulerModeUpdateRequest,
     SchedulerStatusResponse,
+    TriggerType,
 )
 from app.modules.scheduler.service import (
     execute_cycle_job,
@@ -32,15 +34,17 @@ async def get_scheduler_status(
     db: AsyncSession = Depends(get_db),
 ) -> SchedulerStatusResponse:
     repo = ScheduleCycleRepository(session=db)
-    scheduled_completed = await repo.get_completed_cycle_count(trigger_type="scheduled")
+    scheduled_completed = await repo.get_completed_cycle_count(trigger_type=TriggerType.SCHEDULED)
     manual_completed = await repo.get_manual_trigger_count()
     max_cycles = settings.max_cycles
     mode = get_current_mode()
 
-    if mode == "once":
+    if mode == SchedulerMode.ONCE:
         remaining = max(0, max_cycles - scheduled_completed)
     else:
-        completed_24h = await repo.get_completed_cycle_count_in_24h(trigger_type="scheduled")
+        completed_24h = await repo.get_completed_cycle_count_in_24h(
+            trigger_type=TriggerType.SCHEDULED
+        )
         remaining = max(0, max_cycles - completed_24h)
 
     return SchedulerStatusResponse(
@@ -66,7 +70,7 @@ async def get_scheduler_status(
 async def trigger_manual_cycle(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, str]:
-    await execute_cycle_job(trigger_type="manual", db_session=db)
+    await execute_cycle_job(trigger_type=TriggerType.MANUAL, db_session=db)
     return {"message": "Manual invoice batch cycle triggered successfully."}
 
 

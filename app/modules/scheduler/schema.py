@@ -1,9 +1,22 @@
 from datetime import datetime
-from typing import Literal
+from enum import StrEnum
 
 from pydantic import BaseModel, Field
 
-SchedulerMode = Literal["once", "recurring"]
+
+class SchedulerMode(StrEnum):
+    ONCE = "once"
+    RECURRING = "recurring"
+
+
+class TriggerType(StrEnum):
+    SCHEDULED = "scheduled"
+    MANUAL = "manual"
+
+
+class CycleStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
 
 
 class SchedulerStatusResponse(BaseModel):

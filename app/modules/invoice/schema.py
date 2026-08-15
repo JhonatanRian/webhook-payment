@@ -1,7 +1,23 @@
 from datetime import datetime
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
+
+
+class InvoiceStatus(StrEnum):
+    CREATED = "created"
+    CREDITED = "credited"
+    PAID = "paid"
+    CANCELED = "canceled"
+    OVERPAID = "overpaid"
+    EXPIRED = "expired"
+
+
+class BatchStatus(StrEnum):
+    COMPLETED = "completed"
+    FAILED = "failed"
+    PARTIAL = "partial"
 
 
 class InvoiceCreate(BaseModel):
