@@ -10,8 +10,10 @@ from app.core.concurrency import run_in_thread
 from app.core.exceptions.starkbank_mapper import handle_starkbank_exception
 from app.modules.invoice.model import InvoiceBatch, InvoiceRecord
 from app.modules.invoice.repository import InvoiceBatchRepository, InvoiceRecordRepository
+from app.modules.invoice.schema import BatchStatus, InvoiceStatus
 from app.modules.scheduler.model import ScheduleCycleRecord
 from app.modules.scheduler.repository import ScheduleCycleRepository
+from app.modules.scheduler.schema import CycleStatus
 
 logger = logging.getLogger(__name__)
 
@@ -66,14 +68,14 @@ class InvoiceService:
         batch = InvoiceBatch(
             cycle_index=cycle_index,
             invoice_count=count,
-            status="pending",
+            status=BatchStatus.COMPLETED,
         )
         await self.batch_repo.create(batch, autocommit=False)
 
         created_stark_items: list[Any] = []
         try:
             created_stark_items = await self._create_stark_invoices(items_data)
-            batch.status = "completed"
+            batch.status = BatchStatus.COMPLETED
         except Exception as err:
             logger.error(
                 "Invoice batch failed [batch_id=%s, count=%d]: %s",
@@ -81,14 +83,14 @@ class InvoiceService:
                 count,
                 err,
             )
-            batch.status = "failed"
+            batch.status = BatchStatus.FAILED
 
             if trigger_type is not None:
                 cycle_repo = ScheduleCycleRepository(session=self.session)
                 manual_count = await cycle_repo.get_manual_trigger_count()
                 cycle_rec = ScheduleCycleRecord(
                     cycle_index=cycle_index or (manual_count + 1),
-                    status="failed",
+                    status=CycleStatus.FAILED,
                     trigger_type=trigger_type,
                     invoice_count=0,
                     batch_id=batch.id,
@@ -105,7 +107,7 @@ class InvoiceService:
                 amount=stark_item.amount if hasattr(stark_item, "amount") else item["amount"],
                 tax_id=item["tax_id"],
                 name=item["name"],
-                status=getattr(stark_item, "status", "created"),
+                status=getattr(stark_item, "status", InvoiceStatus.CREATED),
             )
             self.session.add(rec)
 
@@ -114,7 +116,7 @@ class InvoiceService:
             manual_count = await cycle_repo.get_manual_trigger_count()
             cycle_rec = ScheduleCycleRecord(
                 cycle_index=cycle_index or (manual_count + 1),
-                status="completed",
+                status=CycleStatus.COMPLETED,
                 trigger_type=trigger_type,
                 invoice_count=batch.invoice_count,
                 batch_id=batch.id,

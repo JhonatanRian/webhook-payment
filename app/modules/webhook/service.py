@@ -16,6 +16,7 @@ from app.modules.transfer.repository import TransferRepository
 from app.modules.transfer.service import TransferService
 from app.modules.webhook.model import WebhookEventRecord
 from app.modules.webhook.repository import WebhookEventRepository
+from app.modules.webhook.schema import WebhookLogType, WebhookSubscription
 
 logger = logging.getLogger(__name__)
 
@@ -36,10 +37,9 @@ class WebhookService:
     def _parse_event(self, body_bytes: bytes, signature: str) -> starkbank.Event:
         try:
             content_str = body_bytes.decode("utf-8")
+            return starkbank.event.parse(content=content_str, signature=signature)
         except UnicodeDecodeError as err:
             raise WebhookSignatureError(f"Invalid payload encoding: {err}") from err
-        try:
-            return starkbank.event.parse(content=content_str, signature=signature)
         except starkbank.error.InvalidSignatureError as err:
             raise WebhookSignatureError(f"Digital signature validation failed: {err}") from err
         except Exception as err:
@@ -61,7 +61,7 @@ class WebhookService:
             )
             return None
 
-        inv_record.status = "credited"
+        inv_record.status = WebhookLogType.CREDITED
         self.session.add(inv_record)
 
         transfer_rec = await self.transfer_service.transfer_credited_invoice(
@@ -75,7 +75,7 @@ class WebhookService:
 
     async def _handle_invoice_event(self, log_obj: Any, event_id: str) -> str | None:
         """Handles 'invoice' subscription events. Only acts on 'credited' log type."""
-        if getattr(log_obj, "type", None) != "credited":
+        if getattr(log_obj, "type", None) != WebhookLogType.CREDITED:
             return None
         invoice_obj = getattr(log_obj, "invoice", None)
         if not invoice_obj:
@@ -120,8 +120,8 @@ class WebhookService:
         await self.event_repo.create(record, autocommit=False)
 
         _handlers = {
-            "invoice": self._handle_invoice_event,
-            "transfer": self._handle_transfer_event,
+            WebhookSubscription.INVOICE: self._handle_invoice_event,
+            WebhookSubscription.TRANSFER: self._handle_transfer_event,
         }
 
         handler = _handlers.get(subscription)
@@ -148,12 +148,11 @@ class WebhookService:
             subscription,
             log_type,
         )
-        if logger.isEnabledFor(logging.DEBUG):
-            logger.debug(
-                "Incoming Webhook Raw Payload [event_id=%s]: %s",
-                event.id,
-                body_bytes.decode("utf-8", errors="replace"),
-            )
+        logger.debug(
+            "Incoming Webhook Raw Payload [event_id=%s]: %s",
+            event.id,
+            body_bytes.decode("utf-8", errors="replace"),
+        )
 
         async with _webhook_lock:
             try:

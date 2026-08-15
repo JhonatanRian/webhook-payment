@@ -2,8 +2,9 @@ from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.infra.db.session import get_db
-from app.modules.invoice.schema import InvoiceBatchResponse, InvoiceResponse
+from app.modules.invoice.schema import InvoiceBatchResponse, InvoiceResponse, InvoiceStatus
 from app.modules.invoice.service import InvoiceService
+from app.modules.scheduler.schema import TriggerType
 from app.shared.pagination import Page, PaginationParams
 
 router = APIRouter(prefix="/api/v1/invoices", tags=["Invoices"])
@@ -23,7 +24,7 @@ async def trigger_invoice_batch(
     db: AsyncSession = Depends(get_db),
 ) -> InvoiceBatchResponse:
     service = InvoiceService(session=db)
-    batch = await service.issue_batch(count=count, trigger_type="manual")
+    batch = await service.issue_batch(count=count, trigger_type=TriggerType.MANUAL)
     return InvoiceBatchResponse.model_validate(batch)
 
 
@@ -54,7 +55,7 @@ async def list_invoice_batches(
     ),
 )
 async def list_invoices(
-    status_filter: str | None = Query(
+    status_filter: InvoiceStatus | None = Query(
         default=None,
         alias="status",
         description="Filter invoices by status (e.g. 'created', 'credited')",

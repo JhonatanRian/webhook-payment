@@ -1,6 +1,5 @@
 import logging
 from datetime import UTC, datetime, timedelta
-from typing import Literal
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,23 +9,30 @@ from app.infra.db.session import AsyncSessionLocal
 from app.modules.invoice.service import InvoiceService
 from app.modules.scheduler.model import ScheduleCycleRecord
 from app.modules.scheduler.repository import ScheduleCycleRepository, SchedulerStateRepository
+from app.modules.scheduler.schema import CycleStatus, SchedulerMode, TriggerType
 
 logger = logging.getLogger(__name__)
 
-SchedulerMode = Literal["once", "recurring"]
-
 scheduler = AsyncIOScheduler()
 
-current_mode: SchedulerMode = settings.SCHEDULER_MODE
+current_mode: SchedulerMode = (
+    SchedulerMode.RECURRING if settings.SCHEDULER_MODE == "recurring" else SchedulerMode.ONCE
+)
 
 
 def get_current_mode() -> SchedulerMode:
     return current_mode
 
 
-async def set_current_mode(mode: str, db_session: AsyncSession | None = None) -> SchedulerMode:
+async def set_current_mode(
+    mode: SchedulerMode | str, db_session: AsyncSession | None = None
+) -> SchedulerMode:
     global current_mode
-    valid_mode: SchedulerMode = "recurring" if mode.lower().strip() == "recurring" else "once"
+    valid_mode = (
+        SchedulerMode.RECURRING
+        if str(mode).lower().strip() == SchedulerMode.RECURRING
+        else SchedulerMode.ONCE
+    )
     current_mode = valid_mode
 
     try:
@@ -50,13 +56,19 @@ async def init_scheduler_state() -> SchedulerMode:
             state_repo = SchedulerStateRepository(session=session)
             state = await state_repo.get_or_create_state(default_mode=settings.SCHEDULER_MODE)
             valid_mode: SchedulerMode = (
-                "recurring" if state.mode.lower().strip() == "recurring" else "once"
+                SchedulerMode.RECURRING
+                if state.mode.lower().strip() == SchedulerMode.RECURRING
+                else SchedulerMode.ONCE
             )
             current_mode = valid_mode
             logger.info("Scheduler state initialized from database with mode: '%s'", current_mode)
     except Exception as err:
         logger.warning("Could not initialize scheduler state from database: %s", err)
-        current_mode = "recurring" if settings.SCHEDULER_MODE == "recurring" else "once"
+        current_mode = (
+            SchedulerMode.RECURRING
+            if settings.SCHEDULER_MODE == "recurring"
+            else SchedulerMode.ONCE
+        )
 
     return current_mode
 
@@ -97,19 +109,21 @@ async def get_next_run_delay_seconds() -> int:
     return interval_seconds
 
 
-async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode: str) -> None:
+async def _run_cycle_with_session(
+    session: AsyncSession, trigger_type: TriggerType | str, mode: SchedulerMode | str
+) -> None:
     max_cycles = settings.max_cycles
     cycle_repo = ScheduleCycleRepository(session=session)
     state_repo = SchedulerStateRepository(session=session)
 
-    if trigger_type == "manual":
+    if trigger_type == TriggerType.MANUAL:
         total_manual = await cycle_repo.get_manual_trigger_count()
         cycle_index = total_manual + 1
         logger.info("Executing MANUAL trigger on demand (batch %d)...", cycle_index)
     else:
-        if mode == "once":
+        if mode == SchedulerMode.ONCE:
             completed_scheduled = await cycle_repo.get_completed_cycle_count(
-                trigger_type="scheduled"
+                trigger_type=TriggerType.SCHEDULED
             )
             if completed_scheduled >= max_cycles:
                 logger.info(
@@ -120,7 +134,7 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
             cycle_index = completed_scheduled + 1
         else:
             completed_24h = await cycle_repo.get_completed_cycle_count_in_24h(
-                trigger_type="scheduled"
+                trigger_type=TriggerType.SCHEDULED
             )
             if completed_24h >= max_cycles:
                 logger.info(
@@ -128,7 +142,9 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
                     max_cycles,
                 )
                 return
-            total_scheduled = await cycle_repo.get_completed_cycle_count(trigger_type="scheduled")
+            total_scheduled = await cycle_repo.get_completed_cycle_count(
+                trigger_type=TriggerType.SCHEDULED
+            )
             cycle_index = total_scheduled + 1
 
         logger.info("Starting SCHEDULED cycle %d/%d (%s)...", cycle_index, max_cycles, mode)
@@ -139,14 +155,14 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
 
         cycle_rec = ScheduleCycleRecord(
             cycle_index=cycle_index,
-            status="completed",
+            status=CycleStatus.COMPLETED,
             trigger_type=trigger_type,
             invoice_count=batch.invoice_count,
             batch_id=batch.id,
         )
         await cycle_repo.create(cycle_rec, autocommit=True)
 
-        if trigger_type == "scheduled":
+        if trigger_type == TriggerType.SCHEDULED:
             await state_repo.update_last_scheduled_run(datetime.now(UTC))
 
         logger.info(
@@ -159,7 +175,7 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
         logger.error("Failed to execute cycle %d (%s): %s", cycle_index, trigger_type, err)
         cycle_rec = ScheduleCycleRecord(
             cycle_index=cycle_index,
-            status="failed",
+            status=CycleStatus.FAILED,
             trigger_type=trigger_type,
             invoice_count=0,
         )
@@ -167,7 +183,8 @@ async def _run_cycle_with_session(session: AsyncSession, trigger_type: str, mode
 
 
 async def execute_cycle_job(
-    trigger_type: str = "scheduled", db_session: AsyncSession | None = None
+    trigger_type: TriggerType | str = TriggerType.SCHEDULED,
+    db_session: AsyncSession | None = None,
 ) -> None:
     mode = get_current_mode()
 
