@@ -11,6 +11,8 @@ from app.core.exceptions.domain_exceptions import (
 )
 from app.modules.invoice.model import InvoiceRecord
 from app.modules.invoice.repository import InvoiceRecordRepository
+from app.modules.transfer.model import TransferRecord
+from app.modules.transfer.repository import TransferRepository
 from app.modules.webhook.service import WebhookService
 
 
@@ -153,3 +155,100 @@ async def test_webhook_unhandled_exception_rollback(db_session: AsyncSession) ->
         ):
             with pytest.raises(RuntimeError):
                 await service.process_webhook(body_bytes=b"{}", signature="sig_err")
+
+
+async def test_webhook_transfer_status_update(db_session: AsyncSession) -> None:
+    """Stark Bank sends a transfer webhook — we update the local TransferRecord status."""
+    # Create a local TransferRecord that was previously created with status "created"
+    transfer_rec = TransferRecord(
+        stark_transfer_id="stark_tr_001",
+        stark_invoice_id="inv_001",
+        event_id="evt_000",
+        amount=5000,
+        fee=0,
+        net_amount=5000,
+        target_bank_code="20018183",
+        target_branch="0001",
+        target_account="123456",
+        target_name="Stark Bank S.A.",
+        target_tax_id="20018183000180",
+        target_account_type="payment",
+        status="created",
+    )
+    repo = TransferRepository(session=db_session)
+    await repo.create(transfer_rec, autocommit=True)
+
+    service = WebhookService(session=db_session)
+
+    mock_transfer_obj = MagicMock(id="stark_tr_001", status="success")
+    mock_log = MagicMock(type="success", transfer=mock_transfer_obj)
+    mock_event = MagicMock(id="evt_transfer_001", subscription="transfer", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_transfer")
+
+    assert res["status"] == "success"
+    assert res["event_id"] == "evt_transfer_001"
+    assert res["transfer_id"] is not None
+
+    updated = await repo.get_by_stark_id("stark_tr_001")
+    assert updated is not None
+    assert updated.status == "success"
+
+
+async def test_webhook_transfer_status_unknown_id_skips(db_session: AsyncSession) -> None:
+    """Transfer webhook for an unknown stark_transfer_id should not raise — just skip."""
+    service = WebhookService(session=db_session)
+
+    mock_transfer_obj = MagicMock(id="stark_tr_unknown_999", status="success")
+    mock_log = MagicMock(type="success", transfer=mock_transfer_obj)
+    mock_event = MagicMock(id="evt_transfer_002", subscription="transfer", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_tr_unknown")
+
+    assert res["status"] == "success"
+    assert res["transfer_id"] is None
+
+
+async def test_webhook_transfer_missing_transfer_obj_skips(db_session: AsyncSession) -> None:
+    """Transfer webhook with no transfer object in log should be recorded but not crash."""
+    service = WebhookService(session=db_session)
+
+    mock_log = MagicMock(type="success", transfer=None)
+    mock_event = MagicMock(id="evt_transfer_003", subscription="transfer", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_tr_none")
+
+    assert res["status"] == "success"
+    assert res["transfer_id"] is None
+
+
+async def test_webhook_invoice_handler_no_invoice_obj_skips(db_session: AsyncSession) -> None:
+    """Invoice handler should skip gracefully when log.invoice is None despite 'credited' type."""
+    service = WebhookService(session=db_session)
+
+    mock_log = MagicMock(type="credited", invoice=None)
+    mock_event = MagicMock(id="evt_invoice_no_obj", subscription="invoice", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_inv_none")
+
+    assert res["status"] == "success"
+    assert res["transfer_id"] is None
+
+
+async def test_webhook_transfer_handler_no_id_or_status_skips(db_session: AsyncSession) -> None:
+    """Transfer handler should skip when transfer_obj has no id or status."""
+    service = WebhookService(session=db_session)
+
+    mock_transfer_obj = MagicMock(id=None, status=None)
+    mock_log = MagicMock(type="success", transfer=mock_transfer_obj)
+    mock_event = MagicMock(id="evt_transfer_no_id", subscription="transfer", log=mock_log)
+
+    with patch("starkbank.event.parse", return_value=mock_event):
+        res = await service.process_webhook(body_bytes=b"{}", signature="sig_tr_no_id")
+
+    assert res["status"] == "success"
+    assert res["transfer_id"] is None
