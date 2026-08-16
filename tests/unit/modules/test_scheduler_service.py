@@ -119,7 +119,7 @@ async def test_start_and_stop_scheduler(db_session: AsyncSession) -> None:
         _ = get_next_run_time()
         stop_scheduler()
 
-        # Test when scheduler is not running but job exists
+        # Test when scheduler is not running and jobs already exist to trigger reschedule branches
         mock_sched = MagicMock()
         mock_sched.running = False
         mock_sched.get_job.return_value = MagicMock()

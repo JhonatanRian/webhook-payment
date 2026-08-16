@@ -1,4 +1,5 @@
 from collections.abc import Sequence
+from datetime import datetime
 
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -51,6 +52,18 @@ class InvoiceRecordRepository(BaseRepository[InvoiceRecord]):
         query = select(InvoiceRecord).where(InvoiceRecord.stark_invoice_id == stark_invoice_id)
         result = await self.session.execute(query)
         return result.scalars().first()
+
+    async def get_pending_invoices_in_window(self, cutoff: datetime) -> Sequence[InvoiceRecord]:
+        query = (
+            select(InvoiceRecord)
+            .where(
+                InvoiceRecord.status.in_(["created", "pending"]),
+                InvoiceRecord.created >= cutoff,
+            )
+            .order_by(desc(InvoiceRecord.created))
+        )
+        result = await self.session.execute(query)
+        return result.scalars().all()
 
     async def paginate_invoices(
         self,

@@ -102,3 +102,25 @@ def test_cors_origins_parsing() -> None:
     ).parsed_cors_origins == ["https://app.example.com", "http://localhost:5173"]
     assert Settings.model_validate({"CORS_ORIGINS": None}).parsed_cors_origins == ["*"]
     assert Settings(CORS_ORIGINS="").parsed_cors_origins == ["*"]
+
+
+def test_reconciliation_settings_sanitizers() -> None:
+    assert Settings(RECONCILIATION_HOUR="15").RECONCILIATION_HOUR == 15
+    assert Settings(RECONCILIATION_HOUR="25").RECONCILIATION_HOUR == 21
+    assert Settings(RECONCILIATION_HOUR="-1").RECONCILIATION_HOUR == 21
+    assert Settings(RECONCILIATION_HOUR="invalid").RECONCILIATION_HOUR == 21
+
+    assert Settings(RECONCILIATION_MINUTE="30").RECONCILIATION_MINUTE == 30
+    assert Settings(RECONCILIATION_MINUTE="60").RECONCILIATION_MINUTE == 0
+    assert Settings(RECONCILIATION_MINUTE="-5").RECONCILIATION_MINUTE == 0
+    assert Settings(RECONCILIATION_MINUTE="invalid").RECONCILIATION_MINUTE == 0
+
+    assert Settings(RECONCILIATION_LOOKBACK_HOURS="48").RECONCILIATION_LOOKBACK_HOURS == 48
+    assert Settings(RECONCILIATION_LOOKBACK_HOURS="0").RECONCILIATION_LOOKBACK_HOURS == 24
+    assert Settings(RECONCILIATION_LOOKBACK_HOURS="-5").RECONCILIATION_LOOKBACK_HOURS == 24
+    assert Settings(RECONCILIATION_LOOKBACK_HOURS="invalid").RECONCILIATION_LOOKBACK_HOURS == 24
+
+    assert Settings(APP_TIMEZONE="UTC").APP_TIMEZONE == "UTC"
+    assert Settings(APP_TIMEZONE="America/New_York").APP_TIMEZONE == "America/New_York"
+    assert Settings(APP_TIMEZONE="Invalid/Timezone").APP_TIMEZONE == "America/Sao_Paulo"
+    assert Settings.model_validate({"APP_TIMEZONE": None}).APP_TIMEZONE == "America/Sao_Paulo"
