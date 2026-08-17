@@ -11,6 +11,7 @@ from app.core.logging import setup_logging
 from app.core.middleware import RequestLoggingMiddleware
 from app.core.starkbank import setup_starkbank_user
 from app.infra.db.session import init_db
+from app.modules.dashboard.router import router as dashboard_router
 from app.modules.invoice.router import router as invoice_router
 from app.modules.scheduler.router import router as scheduler_router
 from app.modules.scheduler.service import start_scheduler, stop_scheduler
@@ -52,6 +53,7 @@ app.include_router(webhook_router)
 app.include_router(invoice_router)
 app.include_router(transfer_router)
 app.include_router(scheduler_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/health", tags=["Health"])
