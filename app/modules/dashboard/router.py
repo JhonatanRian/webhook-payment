@@ -5,7 +5,7 @@ from app.infra.db.session import get_db
 from app.modules.dashboard.schema import DashboardSummaryResponse
 from app.modules.dashboard.service import DashboardService
 
-router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
+router = APIRouter(prefix="/api/v1/dashboard", tags=["Dashboard"])
 
 
 @router.get(
