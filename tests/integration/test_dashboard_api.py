@@ -42,7 +42,7 @@ async def test_get_dashboard_summary_endpoint(
     )
     await tr_repo.create(tr, autocommit=True)
 
-    response = await async_client.get("/dashboard/summary")
+    response = await async_client.get("/api/v1/dashboard/summary")
     assert response.status_code == 200
 
     data = response.json()
