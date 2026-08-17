@@ -1,5 +1,7 @@
 from collections.abc import AsyncGenerator
 
+from sqlalchemy import event
+from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -15,6 +17,16 @@ engine = create_async_engine(
     echo=False,
     connect_args={"check_same_thread": False} if "sqlite" in settings.DATABASE_URL else {},
 )
+
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):  # noqa: ARG001
+    if "sqlite" in settings.DATABASE_URL:
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA journal_mode=WAL")
+        cursor.execute("PRAGMA busy_timeout=5000")
+        cursor.close()
+
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

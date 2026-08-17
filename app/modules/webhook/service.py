@@ -51,7 +51,9 @@ class WebhookService:
         fee = getattr(item_obj, "fee", 0) or 0
 
         inv_record = (
-            await self.invoice_repo.get_by_stark_id(stark_item_id) if stark_item_id else None
+            await self.invoice_repo.get_by_stark_id(stark_item_id)
+            if isinstance(stark_item_id, str)
+            else None
         )
 
         if not inv_record:
@@ -74,26 +76,62 @@ class WebhookService:
         return str(transfer_rec.id)
 
     async def _handle_invoice_event(self, log_obj: Any, event_id: str) -> str | None:
-        """Handles 'invoice' subscription events. Only acts on 'credited' log type."""
-        if getattr(log_obj, "type", None) != WebhookLogType.CREDITED:
-            return None
+        """Handles 'invoice' subscription events.
+
+        Synchronizes local invoice status for any Stark Bank invoice event
+        (paid, credited, overdue, canceled, expired, etc.).
+        Executes payout transfer when log_type == 'credited'.
+        """
         invoice_obj = getattr(log_obj, "invoice", None)
         if not invoice_obj:
             return None
-        return await self._dispatch_credited_invoice(invoice_obj, event_id)
+
+        stark_item_id = getattr(invoice_obj, "id", None)
+        log_type = getattr(log_obj, "type", None)
+
+        if isinstance(stark_item_id, str) and isinstance(log_type, str):
+            inv_record = await self.invoice_repo.get_by_stark_id(stark_item_id)
+            if inv_record:
+                inv_record.status = log_type
+                self.session.add(inv_record)
+                logger.info(
+                    "Invoice status updated via webhook [stark_invoice_id=%s, status=%s]",
+                    stark_item_id,
+                    log_type,
+                )
+
+        if log_type == WebhookLogType.CREDITED:
+            return await self._dispatch_credited_invoice(invoice_obj, event_id)
+
+        return None
 
     async def _handle_transfer_event(self, log_obj: Any, event_id: str) -> str | None:  # noqa: ARG002
         """Handles 'transfer' subscription events. Updates local TransferRecord status."""
         transfer_obj = getattr(log_obj, "transfer", None)
         if not transfer_obj:
             return None
+
         stark_transfer_id = getattr(transfer_obj, "id", None)
-        new_status = getattr(transfer_obj, "status", None)
-        if not (stark_transfer_id and new_status):
+        new_status = getattr(transfer_obj, "status", None) or getattr(log_obj, "type", None)
+        if not (isinstance(stark_transfer_id, str) and isinstance(new_status, str)):
             return None
-        transfer_rec = await self.transfer_repo.get_by_stark_id(stark_transfer_id)
+
+        # Resilient lookup: micro-retries to absorb concurrency / commit latency
+        transfer_rec = None
+        for attempt in range(3):
+            transfer_rec = await self.transfer_repo.get_by_stark_id(stark_transfer_id)
+            if transfer_rec:
+                break
+            if attempt < 2:
+                await asyncio.sleep(0.2)
+
         if not transfer_rec:
+            logger.warning(
+                "Received transfer webhook for unknown transfer '%s'. Skipping status update.",
+                stark_transfer_id,
+            )
             return None
+
         transfer_rec.status = new_status
         self.session.add(transfer_rec)
         logger.info(
