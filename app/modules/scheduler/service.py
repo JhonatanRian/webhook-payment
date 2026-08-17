@@ -1,23 +1,25 @@
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
+from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.infra.db.session import AsyncSessionLocal
 from app.modules.invoice.service import InvoiceService
 from app.modules.scheduler.model import ScheduleCycleRecord
+from app.modules.scheduler.reconciliation import ReconciliationService
 from app.modules.scheduler.repository import ScheduleCycleRepository, SchedulerStateRepository
-from app.modules.scheduler.schema import CycleStatus, SchedulerMode, TriggerType
+from app.modules.scheduler.schema import SchedulerMode, TriggerType
 
 logger = logging.getLogger(__name__)
 
 scheduler = AsyncIOScheduler()
 
-current_mode: SchedulerMode = (
-    SchedulerMode.RECURRING if settings.SCHEDULER_MODE == "recurring" else SchedulerMode.ONCE
-)
+current_mode: SchedulerMode = settings.SCHEDULER_MODE
 
 
 def get_current_mode() -> SchedulerMode:
@@ -28,9 +30,9 @@ async def set_current_mode(
     mode: SchedulerMode | str, db_session: AsyncSession | None = None
 ) -> SchedulerMode:
     global current_mode
-    valid_mode = (
+    valid_mode: SchedulerMode = (
         SchedulerMode.RECURRING
-        if str(mode).lower().strip() == SchedulerMode.RECURRING
+        if str(mode).lower().strip() == SchedulerMode.RECURRING.value
         else SchedulerMode.ONCE
     )
     current_mode = valid_mode
@@ -38,11 +40,11 @@ async def set_current_mode(
     try:
         if db_session is not None:
             state_repo = SchedulerStateRepository(session=db_session)
-            await state_repo.set_mode(valid_mode)
+            await state_repo.set_mode(valid_mode.value)
         else:
             async with AsyncSessionLocal() as session:
                 state_repo = SchedulerStateRepository(session=session)
-                await state_repo.set_mode(valid_mode)
+                await state_repo.set_mode(valid_mode.value)
     except Exception as err:
         logger.warning("Could not persist scheduler mode to database: %s", err)
 
@@ -57,7 +59,7 @@ async def init_scheduler_state() -> SchedulerMode:
             state = await state_repo.get_or_create_state(default_mode=settings.SCHEDULER_MODE)
             valid_mode: SchedulerMode = (
                 SchedulerMode.RECURRING
-                if state.mode.lower().strip() == SchedulerMode.RECURRING
+                if state.mode.lower().strip() == SchedulerMode.RECURRING.value
                 else SchedulerMode.ONCE
             )
             current_mode = valid_mode
@@ -66,7 +68,7 @@ async def init_scheduler_state() -> SchedulerMode:
         logger.warning("Could not initialize scheduler state from database: %s", err)
         current_mode = (
             SchedulerMode.RECURRING
-            if settings.SCHEDULER_MODE == "recurring"
+            if settings.SCHEDULER_MODE == SchedulerMode.RECURRING.value
             else SchedulerMode.ONCE
         )
 
@@ -116,14 +118,17 @@ async def _run_cycle_with_session(
     cycle_repo = ScheduleCycleRepository(session=session)
     state_repo = SchedulerStateRepository(session=session)
 
-    if trigger_type == TriggerType.MANUAL:
+    trigger_val = trigger_type.value if isinstance(trigger_type, TriggerType) else str(trigger_type)
+    mode_val = mode.value if isinstance(mode, SchedulerMode) else str(mode)
+
+    if trigger_val == TriggerType.MANUAL.value:
         total_manual = await cycle_repo.get_manual_trigger_count()
         cycle_index = total_manual + 1
         logger.info("Executing MANUAL trigger on demand (batch %d)...", cycle_index)
     else:
-        if mode == SchedulerMode.ONCE:
+        if mode_val == SchedulerMode.ONCE.value:
             completed_scheduled = await cycle_repo.get_completed_cycle_count(
-                trigger_type=TriggerType.SCHEDULED
+                trigger_type=TriggerType.SCHEDULED.value
             )
             if completed_scheduled >= max_cycles:
                 logger.info(
@@ -134,7 +139,7 @@ async def _run_cycle_with_session(
             cycle_index = completed_scheduled + 1
         else:
             completed_24h = await cycle_repo.get_completed_cycle_count_in_24h(
-                trigger_type=TriggerType.SCHEDULED
+                trigger_type=TriggerType.SCHEDULED.value
             )
             if completed_24h >= max_cycles:
                 logger.info(
@@ -143,11 +148,11 @@ async def _run_cycle_with_session(
                 )
                 return
             total_scheduled = await cycle_repo.get_completed_cycle_count(
-                trigger_type=TriggerType.SCHEDULED
+                trigger_type=TriggerType.SCHEDULED.value
             )
             cycle_index = total_scheduled + 1
 
-        logger.info("Starting SCHEDULED cycle %d/%d (%s)...", cycle_index, max_cycles, mode)
+        logger.info("Starting SCHEDULED cycle %d/%d (%s)...", cycle_index, max_cycles, mode_val)
 
     try:
         invoice_service = InvoiceService(session=session)
@@ -155,28 +160,28 @@ async def _run_cycle_with_session(
 
         cycle_rec = ScheduleCycleRecord(
             cycle_index=cycle_index,
-            status=CycleStatus.COMPLETED,
-            trigger_type=trigger_type,
+            status="completed",
+            trigger_type=trigger_val,
             invoice_count=batch.invoice_count,
             batch_id=batch.id,
         )
         await cycle_repo.create(cycle_rec, autocommit=True)
 
-        if trigger_type == TriggerType.SCHEDULED:
+        if trigger_val == TriggerType.SCHEDULED.value:
             await state_repo.update_last_scheduled_run(datetime.now(UTC))
 
         logger.info(
             "Cycle %d (%s) completed with %d invoices.",
             cycle_index,
-            trigger_type,
+            trigger_val,
             batch.invoice_count,
         )
     except Exception as err:
-        logger.error("Failed to execute cycle %d (%s): %s", cycle_index, trigger_type, err)
+        logger.error("Failed to execute cycle %d (%s): %s", cycle_index, trigger_val, err)
         cycle_rec = ScheduleCycleRecord(
             cycle_index=cycle_index,
-            status=CycleStatus.FAILED,
-            trigger_type=trigger_type,
+            status="failed",
+            trigger_type=trigger_val,
             invoice_count=0,
         )
         await cycle_repo.create(cycle_rec, autocommit=True)
@@ -193,6 +198,19 @@ async def execute_cycle_job(
     else:
         async with AsyncSessionLocal() as session:
             await _run_cycle_with_session(session, trigger_type, mode)
+
+
+async def execute_reconciliation_job(
+    db_session: AsyncSession | None = None,
+) -> dict[str, Any]:
+    logger.info("Executing scheduled financial reconciliation job...")
+    if db_session is not None:
+        service = ReconciliationService(session=db_session)
+        return await service.run_reconciliation()
+    else:
+        async with AsyncSessionLocal() as session:
+            service = ReconciliationService(session=session)
+            return await service.run_reconciliation()
 
 
 async def start_scheduler(run_on_startup: bool = True) -> None:
@@ -221,6 +239,36 @@ async def start_scheduler(run_on_startup: bool = True) -> None:
                     coalesce=True,
                     misfire_grace_time=3600,
                 )
+
+            if settings.RECONCILIATION_ENABLED:
+                tz = ZoneInfo(settings.APP_TIMEZONE)
+                cron_trigger = CronTrigger(
+                    hour=settings.RECONCILIATION_HOUR,
+                    minute=settings.RECONCILIATION_MINUTE,
+                    timezone=tz,
+                )
+                reconcile_job = scheduler.get_job("daily_reconciliation_job")
+                if reconcile_job:
+                    scheduler.reschedule_job(
+                        "daily_reconciliation_job",
+                        trigger=cron_trigger,
+                    )
+                else:
+                    scheduler.add_job(
+                        execute_reconciliation_job,
+                        trigger=cron_trigger,
+                        id="daily_reconciliation_job",
+                        replace_existing=True,
+                        coalesce=True,
+                        misfire_grace_time=3600,
+                    )
+                logger.info(
+                    "Daily financial reconciliation scheduled at %02d:%02d (%s).",
+                    settings.RECONCILIATION_HOUR,
+                    settings.RECONCILIATION_MINUTE,
+                    settings.APP_TIMEZONE,
+                )
+
             scheduler.start()
             logger.info(
                 "APScheduler started (first run in %ds, interval: %d min, coalesce=True).",

@@ -2,6 +2,7 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Literal
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -40,6 +41,12 @@ class Settings(BaseSettings):
     SCHEDULER_INTERVAL_MINUTES: int = 180
     SCHEDULER_JOBSTORE_URL: str = "sqlite:///./webhook_payment.db"
 
+    RECONCILIATION_ENABLED: bool = True
+    RECONCILIATION_HOUR: int = 21
+    RECONCILIATION_MINUTE: int = 0
+    APP_TIMEZONE: str = "America/Sao_Paulo"
+    RECONCILIATION_LOOKBACK_HOURS: int = 24
+
     @field_validator("SCHEDULER_JOBSTORE_URL", mode="before")
     @classmethod
     def sanitize_jobstore_url(cls, v: Any) -> str:
@@ -73,6 +80,46 @@ class Settings(BaseSettings):
             return val if val >= 1 else 180
         except (ValueError, TypeError):
             return 180
+
+    @field_validator("RECONCILIATION_HOUR", mode="before")
+    @classmethod
+    def sanitize_reconciliation_hour(cls, v: Any) -> int:
+        try:
+            val = int(v)
+            return val if 0 <= val <= 23 else 21
+        except (ValueError, TypeError):
+            return 21
+
+    @field_validator("RECONCILIATION_MINUTE", mode="before")
+    @classmethod
+    def sanitize_reconciliation_minute(cls, v: Any) -> int:
+        try:
+            val = int(v)
+            return val if 0 <= val <= 59 else 0
+        except (ValueError, TypeError):
+            return 0
+
+    @field_validator("RECONCILIATION_LOOKBACK_HOURS", mode="before")
+    @classmethod
+    def sanitize_reconciliation_lookback_hours(cls, v: Any) -> int:
+        try:
+            val = int(v)
+            return val if val >= 1 else 24
+        except (ValueError, TypeError):
+            return 24
+
+    @field_validator("APP_TIMEZONE", mode="before")
+    @classmethod
+    def sanitize_app_timezone(cls, v: Any) -> str:
+        if isinstance(v, str) and v.strip():
+            tz_name = v.strip()
+            try:
+                ZoneInfo(tz_name)
+                return tz_name
+            except ZoneInfoNotFoundError:
+                logger.warning("Invalid timezone '%s', defaulting to 'America/Sao_Paulo'", tz_name)
+                return "America/Sao_Paulo"
+        return "America/Sao_Paulo"
 
     @property
     def max_cycles(self) -> int:
